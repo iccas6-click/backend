@@ -52,20 +52,67 @@ AI 저장소는 제품명, 성분명, 함량, `confidence`, `needs_confirmation`
 
 ## 디렉터리 구조
 
-현재 저장소의 주요 구조는 다음과 같습니다.
-
 ```text
 backend/
-├── data/
-│   ├── source/
-│   └── csv/
-├── schema/
+├── app/
+│   ├── api/v1/endpoints/   # API 엔드포인트
+│   ├── core/               # 설정 (환경변수)
+│   ├── db/                 # DB 연결
+│   ├── schemas/            # Pydantic 응답 스키마
+│   └── main.py             # FastAPI 앱 진입점
+├── db/
+│   └── init.sql            # MySQL 테이블 생성
 ├── scripts/
-├── validation/
-├── docs/
+│   └── load_interaction_data.py  # 엑셀 → MySQL 데이터 적재
+├── data/source/            # 원본 엑셀 데이터셋
+├── validation/             # 데이터 무결성 검증 스크립트
+├── docker-compose.yml
+├── Dockerfile
 ├── requirements.txt
 └── README.md
 ```
+
+## 서버 실행 방법
+
+### 사전 준비
+
+`.env.example`을 복사해 `.env` 파일 생성 후 값 설정:
+
+```
+MYSQL_ROOT_PASSWORD=your_root_password
+MYSQL_DATABASE=click_backend_db
+MYSQL_USER=click_user
+MYSQL_PASSWORD=your_password
+MYSQL_HOST=127.0.0.1
+MYSQL_PORT=3307
+```
+
+### Docker DB 실행
+
+```powershell
+docker compose up -d
+```
+
+### 데이터 적재
+
+```powershell
+python scripts/load_interaction_data.py
+```
+
+### FastAPI 서버 실행
+
+```powershell
+uvicorn app.main:app --reload
+```
+
+서버 실행 후 `http://localhost:8000/docs` 에서 Swagger UI로 API 테스트 가능.
+
+## 주요 API
+
+| Method | Path | 설명 |
+| --- | --- | --- |
+| GET | `/health` | 서버 상태 확인 |
+| GET | `/api/v1/interactions?supplement=성분명` | 건기식-약물 상호작용 조회 |
 
 ## 현재 데이터셋 파일
 
