@@ -5,7 +5,6 @@ Excel 상호작용 데이터를 MySQL DB에 적재하는 스크립트.
 from __future__ import annotations
 
 import os
-import sys
 from pathlib import Path
 
 import pandas as pd
@@ -19,11 +18,11 @@ EXCEL_PATH = Path("data/source/drug_supplement_interactions_standardized_v0.21_r
 
 def get_conn():
     return mysql.connector.connect(
-        host=os.environ.get("MYSQL_HOST", "localhost"),
-        port=int(os.environ.get("MYSQL_PORT", 3306)),
-        database=os.environ.get("MYSQL_DATABASE", "click_backend_db"),
-        user=os.environ.get("MYSQL_USER", "click_user"),
-        password=os.environ.get("MYSQL_PASSWORD", "click0623"),
+        host=os.environ["MYSQL_HOST"],
+        port=int(os.environ["MYSQL_PORT"]),
+        database=os.environ["MYSQL_DATABASE"],
+        user=os.environ["MYSQL_USER"],
+        password=os.environ["MYSQL_PASSWORD"],
         charset="utf8mb4",
     )
 
@@ -182,7 +181,7 @@ def load_raw_interactions(cursor, df: pd.DataFrame):
 def main():
     if not EXCEL_PATH.exists():
         print(f"파일 없음: {EXCEL_PATH}")
-        sys.exit(1)
+        raise SystemExit(1)
 
     print("엑셀 로드 중...")
     sheets = pd.read_excel(EXCEL_PATH, sheet_name=None, dtype=object, engine="openpyxl")
@@ -201,7 +200,7 @@ def main():
     except Exception as e:
         conn.rollback()
         print(f"오류: {e}")
-        sys.exit(1)
+        raise SystemExit(1)
     finally:
         cursor.execute("SET FOREIGN_KEY_CHECKS=1")
         cursor.close()

@@ -13,6 +13,8 @@ def get_interactions(supplement: str):
     건기식 이름으로 약물 상호작용 조회.
     supplement: 건기식 성분명 (예: 비타민C, 오메가3)
     """
+    conn = None
+    cursor = None
     try:
         conn = get_conn()
         cursor = conn.cursor(dictionary=True)
@@ -29,8 +31,6 @@ def get_interactions(supplement: str):
             (f"%{supplement}%", f"%{supplement}%"),
         )
         rows = cursor.fetchall()
-        cursor.close()
-        conn.close()
 
         return InteractionResponse(
             supplement_name=supplement,
@@ -39,3 +39,8 @@ def get_interactions(supplement: str):
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
