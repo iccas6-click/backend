@@ -34,6 +34,10 @@ ALIASES: list[tuple[str, str, str]] = [
     ("SUPP_001", "Korean red ginseng", "common"),
     ("SUPP_001", "Red ginseng", "common"),
     ("SUPP_001", "Panax ginseng", "scientific"),
+    ("SUPP_001", "진세노사이드", "common"),
+    ("SUPP_001", "Ginsenoside", "common"),
+    ("SUPP_001", "진세노사이드 Rg1", "common"),
+    ("SUPP_001", "진세노사이드 Rb1", "common"),
 
     # SUPP_002 프로바이오틱스
     ("SUPP_002", "유산균", "common"),
