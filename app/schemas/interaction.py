@@ -16,5 +16,8 @@ class InteractionResult(BaseModel):
 
 class InteractionResponse(BaseModel):
     supplement_name: str
+    resolved_name: Optional[str]       # supplement_map에서 찾은 canonical 이름
+    matched_alias: Optional[str]       # 실제로 매칭된 alias
+    match_type: Optional[str]          # exact_canonical / exact_raw / exact_alias / partial / not_found
     interactions: list[InteractionResult]
     total: int
