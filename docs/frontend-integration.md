@@ -1,6 +1,12 @@
 # 프론트엔드 연동 가이드
 
-백엔드 서버: `http://localhost:8000` (로컬) — 배포 후 주소 교체 필요
+## 서버 포트 정리
+
+| 서버 | 포트 | 용도 |
+|---|---|---|
+| 백엔드 | 8000 | 상호작용 분석 |
+| pill 서버 | 8001 | 알약 인식 (팀원 담당) |
+| supplement 서버 | 8002 | 건강기능식품 인식 |
 
 ---
 
@@ -137,29 +143,61 @@ Content-Type: application/json
 
 ---
 
-## AI 서버와의 연동 흐름
-
-프론트엔드에서 두 서버를 순서대로 호출합니다.
+## 전체 연동 흐름
 
 ```
-[1단계] 이미지 촬영
+[1단계] 알약 사진 촬영
         ↓
-[2단계] AI 서버 (port 8001)
+[2단계] pill 서버 (port 8001)
+        POST /recognize
+        multipart/form-data, field: file
+        → { candidates: [{ product_name, drug_canonical_ko, ... }], ... }
+        ↓  candidates[0].product_name 또는 drug_canonical_ko 추출
+        → RecognizedItem { name: "아스피린", category: "알약" }
+
+[1단계] 건기식 사진 촬영
+        ↓
+[2단계] supplement 서버 (port 8002)
         POST /api/v1/supplement/recognize
         multipart/form-data, field: image
         → { status, product: { product_name, ingredients: ["비타민C", "오메가-3", ...], confidence } }
-        ↓
+        ↓  ingredients 각 항목 추출
+        → RecognizedItem { name: "비타민C", category: "건강기능식품 라벨" }
+
 [3단계] 사용자 확인·수정 화면
-        ingredients 각 항목 → RecognizedItem { name, category: "건강기능식품 라벨" }
-        알약 인식 결과도 추가 → RecognizedItem { name, category: "알약" }
+        두 결과를 합쳐서 목록 표시, 사용자가 수정 가능
         ↓
 [4단계] 백엔드 (port 8000)
         POST /api/v1/interactions/analyze
-        { items: [...RecognizedItem] }
+        { items: [
+            { name: "아스피린", category: "알약" },
+            { name: "비타민C", category: "건강기능식품 라벨" },
+            { name: "오메가-3", category: "건강기능식품 라벨" }
+          ] }
         → AnalysisResult { overall, summary, pairs }
         ↓
 [5단계] 결과 화면 표시
 ```
+
+### pill 서버 응답에서 약물명 추출 방법
+
+```json
+// POST /recognize 응답 구조 (요약)
+{
+  "candidates": [
+    {
+      "pill_id": "123456",
+      "product_name": "아스피린정100mg",
+      "drug_canonical_ko": "아스피린",
+      "score": 92.3
+    }
+  ]
+}
+```
+
+백엔드 `/interactions/analyze`에 넘길 이름은 `candidates[0].drug_canonical_ko` 또는 `candidates[0].product_name`을 사용합니다.
+- `drug_canonical_ko`가 있으면 우선 사용 (상호작용 DB 매칭에 유리)
+- 없으면 `product_name` 사용
 
 ---
 
