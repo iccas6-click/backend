@@ -85,7 +85,10 @@ MYSQL_USER=click_user
 MYSQL_PASSWORD=your_password
 MYSQL_HOST=127.0.0.1
 MYSQL_PORT=3307
+DEEPL_API_KEY=your_deepl_api_key
 ```
+
+`DEEPL_API_KEY`는 [DeepL API Free](https://www.deepl.com/pro-api)에서 발급받습니다. 키가 없으면 다국어 번역 없이 원문(한국어) 그대로 반환됩니다.
 
 ### Docker DB 실행
 
@@ -125,7 +128,8 @@ uvicorn app.main:app --reload
   "items": [
     { "name": "아스피린", "category": "알약" },
     { "name": "오메가-3 지방산", "category": "건강기능식품 라벨" }
-  ]
+  ],
+  "lang": "ko"
 }
 
 // 응답
@@ -144,6 +148,39 @@ uvicorn app.main:app --reload
 ```
 
 `overall` / `level` 값: `"danger"` (위험) | `"caution"` (주의) | `"safe"` (안전)
+
+### 다국어 지원 (`lang`)
+
+`lang`: `"ko"`(기본값) | `"en"` | `"fr"`
+
+- `summary`: 자체 번역 테이블로 즉시 번역 (`app/i18n.py`)
+- `description`: DeepL API로 DB 원문(한국어)을 실시간 번역 (`app/services/translator.py`)
+- `DEEPL_API_KEY` 미설정 시 `description`은 한국어 원문 그대로 반환
+
+```json
+// 요청 (lang: "en")
+{
+  "items": [
+    { "name": "아스피린", "category": "알약" },
+    { "name": "오메가-3 지방산", "category": "건강기능식품 라벨" }
+  ],
+  "lang": "en"
+}
+
+// 응답
+{
+  "overall": "danger",
+  "summary": "A dangerous combination was found. Consult a professional before use.",
+  "pairs": [
+    {
+      "id": "1",
+      "items": ["EPA 및 DHA 함유 유지(오메가-3 지방산)", "아스피린"],
+      "level": "danger",
+      "description": "It can increase the risk of bleeding!"
+    }
+  ]
+}
+```
 
 자세한 연동 방법은 [`docs/frontend-integration.md`](docs/frontend-integration.md)를 참고하세요.
 
