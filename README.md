@@ -112,7 +112,40 @@ uvicorn app.main:app --reload
 | Method | Path | 설명 |
 | --- | --- | --- |
 | GET | `/health` | 서버 상태 확인 |
-| GET | `/api/v1/interactions?supplement=성분명` | 건기식-약물 상호작용 조회 |
+| GET | `/api/v1/interactions?supplement=성분명` | 건기식 성분 단건 상호작용 조회 |
+| POST | `/api/v1/interactions/analyze` | 알약 + 건기식 다중 항목 상호작용 분석 |
+
+### POST /api/v1/interactions/analyze
+
+프론트엔드 메인 연동 엔드포인트. 촬영한 알약·건기식 인식 결과를 한번에 보내면 위험도 분석 결과를 반환합니다.
+
+```json
+// 요청
+{
+  "items": [
+    { "name": "아스피린", "category": "알약" },
+    { "name": "오메가-3 지방산", "category": "건강기능식품 라벨" }
+  ]
+}
+
+// 응답
+{
+  "overall": "caution",
+  "summary": "일부 조합에서 주의가 필요합니다. 전문가와 상담을 권장합니다.",
+  "pairs": [
+    {
+      "id": "1",
+      "items": ["오메가-3 지방산", "아스피린"],
+      "level": "caution",
+      "description": "함께 복용 시 출혈 위험이 증가할 수 있음."
+    }
+  ]
+}
+```
+
+`overall` / `level` 값: `"danger"` (위험) | `"caution"` (주의) | `"safe"` (안전)
+
+자세한 연동 방법은 [`docs/frontend-integration.md`](docs/frontend-integration.md)를 참고하세요.
 
 ## 현재 데이터셋 파일
 
