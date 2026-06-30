@@ -81,6 +81,9 @@ STATUS_COLUMNS = {
     "raw_interactions": ["review_status"],
 }
 
+INVALID_SHEET_NAME_CHARACTERS = set(r":\/?*[]")
+MAX_SHEET_NAME_LENGTH = 31
+
 
 @dataclass
 class Finding:
@@ -211,6 +214,66 @@ def status_distributions(frames: dict[str, pd.DataFrame]) -> list[Finding]:
     return findings
 
 
+def check_worksheet_names(frames: dict[str, pd.DataFrame]) -> list[Finding]:
+    findings: list[Finding] = []
+    sheet_names = list(frames.keys())
+
+    overlength = [
+        f"{name!r} ({len(name)} chars)"
+        for name in sheet_names
+        if len(name) > MAX_SHEET_NAME_LENGTH
+    ]
+    if overlength:
+        findings.append(
+            Finding(
+                "ERROR",
+                "worksheet names exceed 31 characters: " + ", ".join(overlength),
+            )
+        )
+    else:
+        findings.append(Finding("PASS", "worksheet names: all names are 31 chars or fewer"))
+
+    invalid_names = []
+    for name in sheet_names:
+        invalid_chars = sorted({char for char in name if char in INVALID_SHEET_NAME_CHARACTERS})
+        if invalid_chars:
+            invalid_names.append(f"{name!r} contains {''.join(invalid_chars)!r}")
+    if invalid_names:
+        findings.append(
+            Finding(
+                "ERROR",
+                "worksheet names contain invalid Excel characters: "
+                + ", ".join(invalid_names),
+            )
+        )
+    else:
+        findings.append(
+            Finding(
+                "PASS",
+                r"worksheet names: no invalid characters (: \ / ? * [ ])",
+            )
+        )
+
+    normalized_names: dict[str, list[str]] = {}
+    for name in sheet_names:
+        normalized_names.setdefault(name.casefold(), []).append(name)
+    duplicates = [names for names in normalized_names.values() if len(names) > 1]
+    if duplicates:
+        findings.append(
+            Finding(
+                "ERROR",
+                "worksheet names have case-insensitive duplicates: "
+                + ", ".join(" / ".join(names) for names in duplicates),
+            )
+        )
+    else:
+        findings.append(
+            Finding("PASS", "worksheet names: no case-insensitive duplicates")
+        )
+
+    return findings
+
+
 def print_section(title: str, findings: list[Finding]) -> None:
     print(f"\n== {title} ==")
     for finding in findings:
@@ -247,13 +310,20 @@ def main() -> int:
 
     primary_findings = check_primary_keys(frames)
     foreign_findings = check_foreign_keys(frames)
+    worksheet_name_findings = check_worksheet_names(frames)
     status_findings = status_distributions(frames)
 
+    print_section("Worksheet Name Checks", worksheet_name_findings)
     print_section("Primary Key Checks", primary_findings)
     print_section("Foreign Key Checks", foreign_findings)
     print_section("Status Distributions", status_findings)
 
-    all_findings = primary_findings + foreign_findings + status_findings
+    all_findings = (
+        worksheet_name_findings
+        + primary_findings
+        + foreign_findings
+        + status_findings
+    )
     error_count = sum(1 for finding in all_findings if finding.level == "ERROR")
     warning_count = sum(1 for finding in all_findings if finding.level == "WARNING")
     pass_count = sum(1 for finding in all_findings if finding.level == "PASS")
