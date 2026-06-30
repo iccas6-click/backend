@@ -77,13 +77,15 @@ Content-Type: application/json
     { "name": "아스피린", "category": "알약" },
     { "name": "오메가-3 지방산", "category": "건강기능식품 라벨" },
     { "name": "비타민D", "category": "건강기능식품 라벨" }
-  ]
+  ],
+  "lang": "ko"
 }
 ```
 
 - `category` 값: `"알약"` 또는 `"건강기능식품 라벨"` (프론트엔드 `ItemCategory` 타입과 동일)
 - `name`: AI 서버가 반환한 성분명 또는 사용자가 입력한 이름
   - 개별인정원료 브랜드명(예: `TWK10`, `락토핏`)도 alias 테이블로 자동 해석
+- `lang`: `"ko"`(기본값) | `"en"` | `"fr"` — 생략하면 한국어로 응답 (버튼 등으로 사용자가 언어 전환 시 이 값만 바꿔서 보내면 됨)
 
 **응답**
 ```json
@@ -140,6 +142,43 @@ Content-Type: application/json
   "pairs": []
 }
 ```
+
+---
+
+### 다국어 (lang)
+
+`lang`을 `"en"` 또는 `"fr"`로 보내면 `summary`와 `description`이 번역되어 반환됩니다.
+
+- `summary`: 고정 문구는 즉시 번역 (자체 번역 테이블)
+- `description`: DB 원문(한국어)을 DeepL API로 실시간 번역
+- `overall` / `level` 값(`danger`/`caution`/`safe`)은 언어와 무관하게 항상 동일한 enum — 화면 표시 라벨("위험"/"Danger"/"Danger")은 프론트엔드에서 `lang`에 맞춰 직접 매핑
+
+```json
+// 요청
+{
+  "items": [
+    { "name": "아스피린", "category": "알약" },
+    { "name": "오메가-3 지방산", "category": "건강기능식품 라벨" }
+  ],
+  "lang": "fr"
+}
+
+// 응답
+{
+  "overall": "danger",
+  "summary": "Une combinaison dangereuse a été détectée. Consultez un professionnel avant toute prise.",
+  "pairs": [
+    {
+      "id": "1",
+      "items": ["EPA 및 DHA 함유 유지(오메가-3 지방산)", "아스피린"],
+      "level": "danger",
+      "description": "Cela peut augmenter le risque d'hémorragie !"
+    }
+  ]
+}
+```
+
+`items` 배열 안의 성분명·약물명(`EPA 및 DHA 함유 유지...`, `아스피린`)은 DB의 canonical 이름이라 번역되지 않고 한국어 그대로 반환됩니다.
 
 ---
 

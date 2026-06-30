@@ -11,3 +11,5 @@ MYSQL_PORT = int(os.environ["MYSQL_PORT"])
 MYSQL_DATABASE = os.environ["MYSQL_DATABASE"]
 MYSQL_USER = os.environ["MYSQL_USER"]
 MYSQL_PASSWORD = os.environ["MYSQL_PASSWORD"]
+
+DEEPL_API_KEY = os.environ.get("DEEPL_API_KEY", "")

@@ -50,3 +50,4 @@ class AnalyzeResponse(BaseModel):
 
 class AnalyzeRequest(BaseModel):
     items: list[AnalyzeItem]
+    lang: str = "ko"  # "ko" | "en" | "fr"

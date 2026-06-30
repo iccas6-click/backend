@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException
 from app.db.connection import get_conn
+from app.i18n import get_summary, parse_lang
 from app.schemas.interaction import (
     AnalyzeRequest,
     AnalyzeResponse,
@@ -12,6 +13,7 @@ from app.schemas.interaction import (
     RiskLevel,
 )
 from app.services.supplement_resolver import resolve_supplement
+from app.services.translator import translate
 
 router = APIRouter()
 
@@ -127,6 +129,7 @@ def analyze_interactions(body: AnalyzeRequest):
     - 알약이 없으면 건강기능식품 성분 전체 상호작용 반환
     - interaction_text_raw 키워드로 danger / caution / safe 추론
     """
+    lang = parse_lang(body.lang)
     supplements = [it for it in body.items if it.category == "건강기능식품 라벨"]
     drugs = [it for it in body.items if it.category == "알약"]
     drug_names = [d.name for d in drugs]
@@ -134,7 +137,7 @@ def analyze_interactions(body: AnalyzeRequest):
     if not supplements:
         return AnalyzeResponse(
             overall="safe",
-            summary="분석할 건강기능식품이 없습니다.",
+            summary=get_summary("no_supplements", lang),
             pairs=[],
         )
 
@@ -157,32 +160,27 @@ def analyze_interactions(body: AnalyzeRequest):
                 level = _infer_level(row["interaction_text_raw"])
                 drug_label = row["drug_canonical_ko"] or row["drug_canonical_en"] or "알 수 없는 약물"
                 pair_id += 1
+                description = row["interaction_text_raw"] or "상호작용 정보가 있습니다."
                 pairs.append(InteractionPair(
                     id=str(pair_id),
                     items=[resolved.canonical_name_ko, drug_label],
                     level=level,
-                    description=row["interaction_text_raw"] or "상호작용 정보가 있습니다.",
+                    description=translate(description, lang),
                 ))
 
         if not pairs:
             return AnalyzeResponse(
                 overall="safe",
-                summary="확인된 상호작용이 없습니다. 복용 전 전문가와 상담하세요.",
+                summary=get_summary("no_interactions", lang),
                 pairs=[],
             )
 
         pairs.sort(key=lambda p: LEVEL_RANK[p.level], reverse=True)
         overall: RiskLevel = pairs[0].level
 
-        summary_map: dict[RiskLevel, str] = {
-            "danger": "위험한 조합이 있습니다. 복용 전 반드시 전문가와 상담하세요.",
-            "caution": "일부 조합에서 주의가 필요합니다. 전문가와 상담을 권장합니다.",
-            "safe": "확인된 주의 사항이 없습니다. 복용 전 전문가와 상담하세요.",
-        }
-
         return AnalyzeResponse(
             overall=overall,
-            summary=summary_map[overall],
+            summary=get_summary(overall, lang),
             pairs=pairs,
         )
 
