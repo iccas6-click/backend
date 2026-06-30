@@ -13,6 +13,7 @@ from app.schemas.interaction import (
     RiskLevel,
 )
 from app.services.supplement_resolver import resolve_supplement
+from app.services.translator import translate
 
 router = APIRouter()
 
@@ -159,11 +160,12 @@ def analyze_interactions(body: AnalyzeRequest):
                 level = _infer_level(row["interaction_text_raw"])
                 drug_label = row["drug_canonical_ko"] or row["drug_canonical_en"] or "알 수 없는 약물"
                 pair_id += 1
+                description = row["interaction_text_raw"] or "상호작용 정보가 있습니다."
                 pairs.append(InteractionPair(
                     id=str(pair_id),
                     items=[resolved.canonical_name_ko, drug_label],
                     level=level,
-                    description=row["interaction_text_raw"] or "상호작용 정보가 있습니다.",
+                    description=translate(description, lang),
                 ))
 
         if not pairs:
