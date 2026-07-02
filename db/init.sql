@@ -114,3 +114,55 @@ CREATE TABLE IF NOT EXISTS raw_interactions (
     collector VARCHAR(100),
     notes TEXT
 ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS interaction_source_registry (
+    source_key VARCHAR(80) PRIMARY KEY,
+    source_name VARCHAR(255) NOT NULL,
+    source_url TEXT,
+    source_type VARCHAR(100),
+    ingestion_status VARCHAR(100) NOT NULL DEFAULT 'planned',
+    notes TEXT,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS interaction_evidence_claims (
+    evidence_id VARCHAR(100) PRIMARY KEY,
+    source_key VARCHAR(80) NOT NULL,
+    source_record_id VARCHAR(100),
+    supplement_id VARCHAR(50) NOT NULL,
+    supplement_name VARCHAR(255),
+    canonical_drug_id VARCHAR(50) NOT NULL,
+    drug_name VARCHAR(255),
+    risk_level VARCHAR(50) NOT NULL,
+    interaction_text TEXT NOT NULL,
+    mechanism_text TEXT,
+    recommendation_text TEXT,
+    evidence_grade VARCHAR(100),
+    source_url TEXT,
+    raw_payload_json JSON,
+    retrieved_at TIMESTAMP NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_evidence_source_record_pair (source_key, source_record_id, supplement_id, canonical_drug_id),
+    KEY idx_evidence_pair (supplement_id, canonical_drug_id),
+    KEY idx_evidence_risk (risk_level),
+    FOREIGN KEY (source_key) REFERENCES interaction_source_registry(source_key),
+    FOREIGN KEY (supplement_id) REFERENCES supplement_map(supplement_id),
+    FOREIGN KEY (canonical_drug_id) REFERENCES canonical_drug_entities(canonical_drug_id)
+) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS interaction_pair_source_checks (
+    supplement_id VARCHAR(50) NOT NULL,
+    canonical_drug_id VARCHAR(50) NOT NULL,
+    source_key VARCHAR(80) NOT NULL,
+    check_status VARCHAR(100) NOT NULL,
+    evidence_count INT NOT NULL DEFAULT 0,
+    checked_at TIMESTAMP NULL,
+    notes TEXT,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (supplement_id, canonical_drug_id, source_key),
+    KEY idx_pair_source_status (source_key, check_status),
+    FOREIGN KEY (supplement_id) REFERENCES supplement_map(supplement_id),
+    FOREIGN KEY (canonical_drug_id) REFERENCES canonical_drug_entities(canonical_drug_id),
+    FOREIGN KEY (source_key) REFERENCES interaction_source_registry(source_key)
+) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;

@@ -122,11 +122,42 @@ def load_drugs(cursor) -> list[dict]:
     return cursor.fetchall()
 
 
-def load_claims(cursor) -> dict[tuple[str, str], list[dict]]:
+def load_evidence_claims(cursor) -> dict[tuple[str, str], list[dict]]:
+    cursor.execute(
+        """
+        SELECT e.evidence_id AS claim_id,
+               e.supplement_id,
+               e.supplement_name AS supplement_canonical_ko,
+               e.canonical_drug_id,
+               e.drug_name AS drug_canonical_ko,
+               NULL AS drug_canonical_en,
+               e.risk_level,
+               e.interaction_text AS interaction_text_raw,
+               r.source_name,
+               e.source_url,
+               e.evidence_grade AS source_review_status,
+               'EVIDENCE_CLAIM' AS overall_review_status
+        FROM interaction_evidence_claims e
+        JOIN interaction_source_registry r
+          ON r.source_key = e.source_key
+        WHERE e.supplement_id IS NOT NULL
+          AND e.canonical_drug_id IS NOT NULL
+          AND e.interaction_text IS NOT NULL
+          AND e.interaction_text <> ''
+        """
+    )
+    grouped: dict[tuple[str, str], list[dict]] = defaultdict(list)
+    for row in cursor.fetchall():
+        grouped[(row["supplement_id"], row["canonical_drug_id"])].append(row)
+    return grouped
+
+
+def load_standardized_claims(cursor) -> dict[tuple[str, str], list[dict]]:
     cursor.execute(
         """
         SELECT claim_id, supplement_id, supplement_canonical_ko,
                canonical_drug_id, drug_canonical_ko, drug_canonical_en,
+               NULL AS risk_level,
                interaction_text_raw, source_name, source_url,
                source_review_status, overall_review_status
         FROM standardized_interactions
@@ -140,6 +171,22 @@ def load_claims(cursor) -> dict[tuple[str, str], list[dict]]:
     for row in cursor.fetchall():
         grouped[(row["supplement_id"], row["canonical_drug_id"])].append(row)
     return grouped
+
+
+def load_claims(cursor) -> dict[tuple[str, str], list[dict]]:
+    cursor.execute(
+        """
+        SELECT COUNT(*)
+        FROM information_schema.tables
+        WHERE table_schema = DATABASE()
+          AND table_name = 'interaction_evidence_claims'
+        """
+    )
+    if cursor.fetchone()["COUNT(*)"]:
+        evidence_claims = load_evidence_claims(cursor)
+        if evidence_claims:
+            return evidence_claims
+    return load_standardized_claims(cursor)
 
 
 def build_row(supplement: dict, drug: dict, claims: list[dict]) -> tuple:
@@ -164,7 +211,7 @@ def build_row(supplement: dict, drug: dict, claims: list[dict]) -> tuple:
             None,
         )
 
-    levels = [_infer_level(row["interaction_text_raw"]) for row in claims]
+    levels = [row.get("risk_level") or _infer_level(row["interaction_text_raw"]) for row in claims]
     risk_level = max(levels, key=risk_rank)
     reasons = unique_join([row["interaction_text_raw"] for row in claims])
     return (
