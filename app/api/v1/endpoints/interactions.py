@@ -281,6 +281,9 @@ def analyze_interactions(body: AnalyzeRequest):
             checkedCount=0,
             detectedCount=0,
             undetectedCount=0,
+            unmatchedSupplementCount=0,
+            unmatchedDrugCount=0,
+            unmatchedCombinationCount=0,
         )
         _write_analyze_debug_log(
             body,
@@ -305,9 +308,11 @@ def analyze_interactions(body: AnalyzeRequest):
         resolved_supplements, unresolved_supplement_count = _resolved_supplements(supplement_names)
         resolved_drugs, unresolved_drug_count = _resolve_drugs(cursor, drug_names)
         drug_ids = [row["canonical_drug_id"] for row in resolved_drugs]
-        checkable_supplement_count = len(resolved_supplements) + unresolved_supplement_count
-        checkable_drug_count = len(drug_ids) + unresolved_drug_count
-        checked_count = checkable_supplement_count * checkable_drug_count if checkable_drug_count else 0
+        total_supplement_count = len(resolved_supplements) + unresolved_supplement_count
+        total_drug_count = len(drug_ids) + unresolved_drug_count
+        checked_count = len(resolved_supplements) * len(drug_ids) if drug_ids else 0
+        total_combination_count = total_supplement_count * total_drug_count if total_drug_count else 0
+        unmatched_combination_count = max(total_combination_count - checked_count, 0)
         debug_context = {
             "supplementNames": supplement_names,
             "drugNames": drug_names,
@@ -315,8 +320,11 @@ def analyze_interactions(body: AnalyzeRequest):
             "unresolvedSupplementCount": unresolved_supplement_count,
             "resolvedDrugs": resolved_drugs,
             "unresolvedDrugCount": unresolved_drug_count,
-            "checkableSupplementCount": checkable_supplement_count,
-            "checkableDrugCount": checkable_drug_count,
+            "matchedSupplementCount": len(resolved_supplements),
+            "matchedDrugCount": len(drug_ids),
+            "totalSupplementCount": total_supplement_count,
+            "totalDrugCount": total_drug_count,
+            "unmatchedCombinationCount": unmatched_combination_count,
         }
 
         for supp in resolved_supplements:
@@ -350,6 +358,9 @@ def analyze_interactions(body: AnalyzeRequest):
                 checkedCount=checked_count,
                 detectedCount=detected_count,
                 undetectedCount=undetected_count,
+                unmatchedSupplementCount=unresolved_supplement_count,
+                unmatchedDrugCount=unresolved_drug_count,
+                unmatchedCombinationCount=unmatched_combination_count,
             )
             _write_analyze_debug_log(body, response, debug_context)
             return response
@@ -364,6 +375,9 @@ def analyze_interactions(body: AnalyzeRequest):
             checkedCount=checked_count,
             detectedCount=detected_count,
             undetectedCount=undetected_count,
+            unmatchedSupplementCount=unresolved_supplement_count,
+            unmatchedDrugCount=unresolved_drug_count,
+            unmatchedCombinationCount=unmatched_combination_count,
         )
         _write_analyze_debug_log(body, response, debug_context)
         return response

@@ -49,6 +49,9 @@ class AnalyzeResponse(BaseModel):
     checkedCount: int = 0
     detectedCount: int = 0
     undetectedCount: int = 0
+    unmatchedSupplementCount: int = 0
+    unmatchedDrugCount: int = 0
+    unmatchedCombinationCount: int = 0
 
 
 class AnalyzeRequest(BaseModel):
