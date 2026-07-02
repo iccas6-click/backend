@@ -118,15 +118,28 @@ def _resolve_drugs(cursor, drug_names: list[str]) -> list[dict]:
             SELECT canonical_drug_id, canonical_name_ko, canonical_name_en
             FROM canonical_drug_entities
             WHERE canonical_name_ko = %s
-               OR canonical_name_en = %s
+               OR LOWER(canonical_name_en) = LOWER(%s)
+            LIMIT 8
+            """,
+            (clean, clean),
+        )
+        rows = cursor.fetchall()
+        if not rows:
+            cursor.execute(
+                """
+                SELECT canonical_drug_id, canonical_name_ko, canonical_name_en
+                FROM canonical_drug_entities
+                WHERE raw_aliases LIKE %s
                OR raw_aliases LIKE %s
                OR %s LIKE CONCAT('%', canonical_name_ko, '%')
                OR %s LIKE CONCAT('%', canonical_name_en, '%')
             LIMIT 8
             """,
-            (clean, clean, f"%{clean}%", clean, clean),
-        )
-        for row in cursor.fetchall():
+                (f"%{clean}%", f"%{clean.lower()}%", clean, clean),
+            )
+            rows = cursor.fetchall()
+
+        for row in rows:
             drug_id = row["canonical_drug_id"]
             if drug_id in seen:
                 continue
@@ -180,20 +193,24 @@ def _query_interactions(cursor, supplement_id: str, drug_ids: list[str], drug_na
     return cursor.fetchall()
 
 
-def _resolved_supplements(supplements: list[AnalyzeItem]) -> list[dict]:
+def _resolved_supplements(supplement_names: list[str]) -> tuple[list[dict], int]:
     """분석 후보 건강기능식품을 canonical supplement 기준으로 중복 제거."""
     resolved_items: list[dict] = []
+    unresolved_count = 0
     seen: set[str] = set()
-    for supp in supplements:
-        resolved = resolve_supplement(supp.name)
-        if not resolved or resolved.supplement_id in seen:
+    for supp_name in supplement_names:
+        resolved = resolve_supplement(supp_name)
+        if not resolved:
+            unresolved_count += 1
+            continue
+        if resolved.supplement_id in seen:
             continue
         seen.add(resolved.supplement_id)
         resolved_items.append({
             "id": resolved.supplement_id,
             "label": resolved.canonical_name_ko,
         })
-    return resolved_items
+    return resolved_items, unresolved_count
 
 
 @router.post("/interactions/analyze", response_model=AnalyzeResponse)
@@ -208,6 +225,7 @@ def analyze_interactions(body: AnalyzeRequest):
     lang = parse_lang(body.lang)
     supplements = [it for it in body.items if it.category == "건강기능식품 라벨"]
     drugs = [it for it in body.items if it.category == "알약"]
+    supplement_names = _clean_unique([s.name for s in supplements])
     drug_names = _clean_unique([d.name for d in drugs])
 
     if not supplements:
@@ -229,10 +247,11 @@ def analyze_interactions(body: AnalyzeRequest):
         pairs: list[InteractionPair] = []
         pair_id = 0
         detected_keys: set[tuple[str, str]] = set()
-        resolved_supplements = _resolved_supplements(supplements)
+        resolved_supplements, unresolved_supplement_count = _resolved_supplements(supplement_names)
         resolved_drugs = _resolve_drugs(cursor, drug_names)
         drug_ids = [row["canonical_drug_id"] for row in resolved_drugs]
-        checked_count = len(resolved_supplements) * len(drug_ids) if drug_ids else 0
+        checkable_supplement_count = len(resolved_supplements) + unresolved_supplement_count
+        checked_count = checkable_supplement_count * len(drug_ids) if drug_ids else 0
 
         for supp in resolved_supplements:
             rows = _query_interactions(cursor, supp["id"], drug_ids, drug_names)
