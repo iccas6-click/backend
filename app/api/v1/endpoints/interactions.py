@@ -196,6 +196,13 @@ def _is_non_ingredient_text(value: str) -> bool:
     return False
 
 
+def _looks_like_pill_product_text(value: str) -> bool:
+    compact = value.strip().replace(" ", "")
+    if compact in KNOWN_PRODUCT_TEXTS:
+        return True
+    return bool(re.search(r"(서방정|발포정|장용정|필름코팅정|연질캡슐|캡슐|정)", compact))
+
+
 def _resolve_product_ingredients(cursor, drug_names: list[str]) -> tuple[list[dict], set[str]]:
     """AIHub 1000종 제품명으로 들어온 값을 제품 성분 canonical drug rows로 확장."""
     resolved: list[dict] = []
@@ -203,6 +210,8 @@ def _resolve_product_ingredients(cursor, drug_names: list[str]) -> tuple[list[di
     seen_ids: set[str] = set()
 
     for clean in _clean_unique(drug_names):
+        if not _looks_like_pill_product_text(clean):
+            continue
         normalized = _normalize_match_key(clean)
         product_keys = _product_lookup_keys(clean)
         like_keys = [key for key in product_keys if key != normalized]
