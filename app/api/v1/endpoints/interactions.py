@@ -390,8 +390,8 @@ def analyze_interactions(body: AnalyzeRequest):
     supplements = [it for it in body.items if it.category == "건강기능식품 라벨"]
     drugs = [it for it in body.items if it.category == "알약"]
     supplement_names = _clean_unique([s.name for s in supplements])
-    ignored_drug_names = [d.name for d in drugs if _is_non_ingredient_text(d.name)]
-    drug_names = _clean_unique([d.name for d in drugs if not _is_non_ingredient_text(d.name)])
+    drug_names = _clean_unique([d.name for d in drugs])
+    ignored_drug_names = [name for name in drug_names if _is_non_ingredient_text(name)]
 
     if not supplements:
         response = AnalyzeResponse(
@@ -449,24 +449,25 @@ def analyze_interactions(body: AnalyzeRequest):
             "unmatchedCombinationCount": unmatched_combination_count,
         }
 
-        for supp in resolved_supplements:
-            rows = _query_interactions(cursor, supp["id"], drug_ids, drug_names)
-            for row in rows:
-                level = _infer_level(row["interaction_text_raw"])
-                if level == "safe":
-                    continue
+        if drug_ids or not drugs:
+            for supp in resolved_supplements:
+                rows = _query_interactions(cursor, supp["id"], drug_ids, drug_names)
+                for row in rows:
+                    level = _infer_level(row["interaction_text_raw"])
+                    if level == "safe":
+                        continue
 
-                drug_label = row["drug_canonical_ko"] or row["drug_canonical_en"] or "알 수 없는 약물"
-                drug_key = row.get("canonical_drug_id") or drug_label
-                detected_keys.add((supp["id"], drug_key))
-                pair_id += 1
-                description = row["interaction_text_raw"] or "상호작용 정보가 있습니다."
-                pairs.append(InteractionPair(
-                    id=str(pair_id),
-                    items=[supp["label"], drug_label],
-                    level=level,
-                    description=translate(description, lang),
-                ))
+                    drug_label = row["drug_canonical_ko"] or row["drug_canonical_en"] or "알 수 없는 약물"
+                    drug_key = row.get("canonical_drug_id") or drug_label
+                    detected_keys.add((supp["id"], drug_key))
+                    pair_id += 1
+                    description = row["interaction_text_raw"] or "상호작용 정보가 있습니다."
+                    pairs.append(InteractionPair(
+                        id=str(pair_id),
+                        items=[supp["label"], drug_label],
+                        level=level,
+                        description=translate(description, lang),
+                    ))
 
         detected_count = len(detected_keys)
         checked_count = max(checked_count, detected_count)
