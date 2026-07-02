@@ -240,7 +240,7 @@ def _resolve_product_ingredients(cursor, drug_names: list[str]) -> tuple[list[di
     return resolved, matched_inputs
 
 
-def _resolve_drugs(cursor, drug_names: list[str]) -> tuple[list[dict], int]:
+def _resolve_drugs(cursor, drug_names: list[str]) -> tuple[list[dict], int, set[str]]:
     """입력된 제품명/성분명을 canonical_drug_entities 행으로 최대한 해석."""
     resolved: list[dict] = []
     unresolved_count = 0
@@ -309,11 +309,11 @@ def _resolve_drugs(cursor, drug_names: list[str]) -> tuple[list[dict], int]:
             seen.add(drug_id)
             resolved.append(row)
 
-    return resolved, unresolved_count
+    return resolved, unresolved_count, product_inputs
 
 
 def _resolve_drug_ids(cursor, drug_names: list[str]) -> list[str]:
-    resolved, _ = _resolve_drugs(cursor, drug_names)
+    resolved, _, _ = _resolve_drugs(cursor, drug_names)
     return [row["canonical_drug_id"] for row in resolved]
 
 
@@ -391,7 +391,6 @@ def analyze_interactions(body: AnalyzeRequest):
     drugs = [it for it in body.items if it.category == "알약"]
     supplement_names = _clean_unique([s.name for s in supplements])
     drug_names = _clean_unique([d.name for d in drugs])
-    ignored_drug_names = [name for name in drug_names if _is_non_ingredient_text(name)]
 
     if not supplements:
         response = AnalyzeResponse(
@@ -412,7 +411,7 @@ def analyze_interactions(body: AnalyzeRequest):
                 "reason": "no_supplements",
                 "supplementNames": supplement_names,
                 "drugNames": drug_names,
-                "ignoredDrugNames": ignored_drug_names,
+                "ignoredDrugNames": [name for name in drug_names if _is_non_ingredient_text(name)],
             },
         )
         return response
@@ -427,7 +426,12 @@ def analyze_interactions(body: AnalyzeRequest):
         pair_id = 0
         detected_keys: set[tuple[str, str]] = set()
         resolved_supplements, unresolved_supplement_count = _resolved_supplements(supplement_names)
-        resolved_drugs, unresolved_drug_count = _resolve_drugs(cursor, drug_names)
+        resolved_drugs, unresolved_drug_count, product_drug_names = _resolve_drugs(cursor, drug_names)
+        ignored_drug_names = [
+            name
+            for name in drug_names
+            if name not in product_drug_names and _is_non_ingredient_text(name)
+        ]
         drug_ids = [row["canonical_drug_id"] for row in resolved_drugs]
         total_supplement_count = len(resolved_supplements) + unresolved_supplement_count
         total_drug_count = len(drug_ids) + unresolved_drug_count
