@@ -408,6 +408,9 @@ def analyze_interactions(body: AnalyzeRequest):
             overall="safe",
             summary=get_summary("no_supplements", lang),
             pairs=[],
+            matchedDrugNames=[],
+            matchedSupplementNames=[],
+            ignoredDrugNames=[name for name in drug_names if _is_non_ingredient_text(name)],
             checkedCount=0,
             detectedCount=0,
             undetectedCount=0,
@@ -444,6 +447,13 @@ def analyze_interactions(body: AnalyzeRequest):
             if name not in product_drug_names and _is_non_ingredient_text(name)
         ]
         drug_ids = [row["canonical_drug_id"] for row in resolved_drugs]
+        matched_drug_names = _clean_unique([
+            name
+            for row in resolved_drugs
+            for name in [row["canonical_name_ko"] or row["canonical_name_en"]]
+            if name
+        ])
+        matched_supplement_names = _clean_unique([row["label"] for row in resolved_supplements])
         total_supplement_count = len(resolved_supplements) + unresolved_supplement_count
         total_drug_count = len(drug_ids) + unresolved_drug_count
         checked_count = len(resolved_supplements) * len(drug_ids) if drug_ids else 0
@@ -493,6 +503,9 @@ def analyze_interactions(body: AnalyzeRequest):
                 overall="safe",
                 summary=get_summary("no_interactions", lang),
                 pairs=[],
+                matchedDrugNames=matched_drug_names,
+                matchedSupplementNames=matched_supplement_names,
+                ignoredDrugNames=ignored_drug_names,
                 checkedCount=checked_count,
                 detectedCount=detected_count,
                 undetectedCount=undetected_count,
@@ -510,6 +523,9 @@ def analyze_interactions(body: AnalyzeRequest):
             overall=overall,
             summary=get_summary(overall, lang),
             pairs=pairs,
+            matchedDrugNames=matched_drug_names,
+            matchedSupplementNames=matched_supplement_names,
+            ignoredDrugNames=ignored_drug_names,
             checkedCount=checked_count,
             detectedCount=detected_count,
             undetectedCount=undetected_count,

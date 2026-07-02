@@ -46,6 +46,9 @@ class AnalyzeResponse(BaseModel):
     overall: RiskLevel
     summary: str
     pairs: list[InteractionPair]
+    matchedDrugNames: list[str] = []
+    matchedSupplementNames: list[str] = []
+    ignoredDrugNames: list[str] = []
     checkedCount: int = 0
     detectedCount: int = 0
     undetectedCount: int = 0
