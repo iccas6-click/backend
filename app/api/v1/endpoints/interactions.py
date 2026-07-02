@@ -216,11 +216,13 @@ def _resolve_product_ingredients(cursor, drug_names: list[str]) -> tuple[list[di
                OR ppi.normalized_product_name LIKE %s
                OR ppi.normalized_product_name LIKE %s
                OR ppi.normalized_product_name LIKE %s
+               OR ppi.normalized_product_name LIKE %s
             ORDER BY ppi.id
             """,
             (
                 clean,
                 normalized,
+                f"%{normalized}%" if len(normalized) >= 3 else "__NO_MATCH__",
                 f"%{like_keys[0]}%" if len(like_keys) > 0 else "__NO_MATCH__",
                 f"%{like_keys[1]}%" if len(like_keys) > 1 else "__NO_MATCH__",
                 f"%{like_keys[2]}%" if len(like_keys) > 2 else "__NO_MATCH__",
