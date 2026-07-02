@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import json
+import os
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, HTTPException
 from app.db.connection import get_conn
 from app.i18n import get_summary, parse_lang
@@ -17,6 +21,42 @@ from app.services.supplement_resolver import resolve_supplement
 from app.services.translator import translate
 
 router = APIRouter()
+
+ANALYZE_DEBUG_LOG_PATH = os.getenv("CLICK_ANALYZE_DEBUG_LOG_PATH", "/tmp/click-analyze-debug.jsonl")
+ANALYZE_DEBUG_LATEST_PATH = os.getenv("CLICK_ANALYZE_DEBUG_LATEST_PATH", "/tmp/click-last-analyze.json")
+
+
+def _model_dump(model) -> dict:
+    if hasattr(model, "model_dump"):
+        return model.model_dump()
+    return model.dict()
+
+
+def _write_analyze_debug_log(body: AnalyzeRequest, response: AnalyzeResponse, context: dict | None = None) -> None:
+    """개발 중 프론트-백엔드 분석 입출력을 서버에서 바로 확인하기 위한 JSON 로그."""
+    entry = {
+        "loggedAt": datetime.now(timezone.utc).isoformat(),
+        "request": {
+            "lang": body.lang,
+            "items": [_model_dump(item) for item in body.items],
+        },
+        "context": context or {},
+        "response": _model_dump(response),
+    }
+    try:
+        latest_dir = os.path.dirname(ANALYZE_DEBUG_LATEST_PATH)
+        log_dir = os.path.dirname(ANALYZE_DEBUG_LOG_PATH)
+        if latest_dir:
+            os.makedirs(latest_dir, exist_ok=True)
+        if log_dir:
+            os.makedirs(log_dir, exist_ok=True)
+        with open(ANALYZE_DEBUG_LATEST_PATH, "w", encoding="utf-8") as latest_file:
+            json.dump(entry, latest_file, ensure_ascii=False, indent=2)
+        with open(ANALYZE_DEBUG_LOG_PATH, "a", encoding="utf-8") as log_file:
+            log_file.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    except Exception:
+        # 분석 API 자체가 로그 기록 실패 때문에 죽으면 안 된다.
+        pass
 
 
 @router.get("/interactions", response_model=InteractionResponse)
@@ -234,7 +274,7 @@ def analyze_interactions(body: AnalyzeRequest):
     drug_names = _clean_unique([d.name for d in drugs])
 
     if not supplements:
-        return AnalyzeResponse(
+        response = AnalyzeResponse(
             overall="safe",
             summary=get_summary("no_supplements", lang),
             pairs=[],
@@ -242,6 +282,16 @@ def analyze_interactions(body: AnalyzeRequest):
             detectedCount=0,
             undetectedCount=0,
         )
+        _write_analyze_debug_log(
+            body,
+            response,
+            {
+                "reason": "no_supplements",
+                "supplementNames": supplement_names,
+                "drugNames": drug_names,
+            },
+        )
+        return response
 
     conn = None
     cursor = None
@@ -258,6 +308,16 @@ def analyze_interactions(body: AnalyzeRequest):
         checkable_supplement_count = len(resolved_supplements) + unresolved_supplement_count
         checkable_drug_count = len(drug_ids) + unresolved_drug_count
         checked_count = checkable_supplement_count * checkable_drug_count if checkable_drug_count else 0
+        debug_context = {
+            "supplementNames": supplement_names,
+            "drugNames": drug_names,
+            "resolvedSupplements": resolved_supplements,
+            "unresolvedSupplementCount": unresolved_supplement_count,
+            "resolvedDrugs": resolved_drugs,
+            "unresolvedDrugCount": unresolved_drug_count,
+            "checkableSupplementCount": checkable_supplement_count,
+            "checkableDrugCount": checkable_drug_count,
+        }
 
         for supp in resolved_supplements:
             rows = _query_interactions(cursor, supp["id"], drug_ids, drug_names)
@@ -283,7 +343,7 @@ def analyze_interactions(body: AnalyzeRequest):
         undetected_count = max(checked_count - detected_count, 0)
 
         if not pairs:
-            return AnalyzeResponse(
+            response = AnalyzeResponse(
                 overall="safe",
                 summary=get_summary("no_interactions", lang),
                 pairs=[],
@@ -291,11 +351,13 @@ def analyze_interactions(body: AnalyzeRequest):
                 detectedCount=detected_count,
                 undetectedCount=undetected_count,
             )
+            _write_analyze_debug_log(body, response, debug_context)
+            return response
 
         pairs.sort(key=lambda p: LEVEL_RANK[p.level], reverse=True)
         overall: RiskLevel = pairs[0].level
 
-        return AnalyzeResponse(
+        response = AnalyzeResponse(
             overall=overall,
             summary=get_summary(overall, lang),
             pairs=pairs,
@@ -303,6 +365,8 @@ def analyze_interactions(body: AnalyzeRequest):
             detectedCount=detected_count,
             undetectedCount=undetected_count,
         )
+        _write_analyze_debug_log(body, response, debug_context)
+        return response
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
