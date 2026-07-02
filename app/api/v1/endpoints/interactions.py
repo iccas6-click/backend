@@ -4,6 +4,7 @@ from fastapi import APIRouter, HTTPException
 from app.db.connection import get_conn
 from app.i18n import get_summary, parse_lang
 from app.schemas.interaction import (
+    AnalyzeItem,
     AnalyzeRequest,
     AnalyzeResponse,
     InteractionPair,
@@ -93,18 +94,28 @@ def _infer_level(text: str | None) -> RiskLevel:
     return "safe"
 
 
-def _resolve_drug_ids(cursor, drug_names: list[str]) -> list[str]:
-    """입력된 제품명/성분명을 canonical_drug_entities의 ID로 최대한 해석."""
-    resolved: list[str] = []
+def _clean_unique(values: list[str]) -> list[str]:
+    seen: set[str] = set()
+    cleaned: list[str] = []
+    for value in values:
+        clean = value.strip()
+        key = clean.replace(" ", "").lower()
+        if not clean or key in seen:
+            continue
+        seen.add(key)
+        cleaned.append(clean)
+    return cleaned
+
+
+def _resolve_drugs(cursor, drug_names: list[str]) -> list[dict]:
+    """입력된 제품명/성분명을 canonical_drug_entities 행으로 최대한 해석."""
+    resolved: list[dict] = []
     seen: set[str] = set()
 
-    for name in drug_names:
-        clean = name.strip()
-        if not clean:
-            continue
+    for clean in _clean_unique(drug_names):
         cursor.execute(
             """
-            SELECT canonical_drug_id
+            SELECT canonical_drug_id, canonical_name_ko, canonical_name_en
             FROM canonical_drug_entities
             WHERE canonical_name_ko = %s
                OR canonical_name_en = %s
@@ -120,19 +131,22 @@ def _resolve_drug_ids(cursor, drug_names: list[str]) -> list[str]:
             if drug_id in seen:
                 continue
             seen.add(drug_id)
-            resolved.append(drug_id)
+            resolved.append(row)
 
     return resolved
 
 
-def _query_interactions(cursor, supplement_id: str, drug_names: list[str]) -> list[dict]:
-    """supplement_id로 상호작용 조회. drug_names가 있으면 해당 약물만 필터."""
-    drug_ids = _resolve_drug_ids(cursor, drug_names)
+def _resolve_drug_ids(cursor, drug_names: list[str]) -> list[str]:
+    return [row["canonical_drug_id"] for row in _resolve_drugs(cursor, drug_names)]
+
+
+def _query_interactions(cursor, supplement_id: str, drug_ids: list[str], drug_names: list[str]) -> list[dict]:
+    """supplement_id로 상호작용 조회. drug_ids가 있으면 해당 약물만 필터."""
     if drug_ids:
         placeholders = ", ".join(["%s"] * len(drug_ids))
         cursor.execute(
             f"""
-            SELECT claim_id, supplement_canonical_ko, drug_canonical_ko,
+            SELECT claim_id, supplement_canonical_ko, canonical_drug_id, drug_canonical_ko,
                    drug_canonical_en, interaction_text_raw
             FROM standardized_interactions
             WHERE supplement_id = %s
@@ -144,7 +158,7 @@ def _query_interactions(cursor, supplement_id: str, drug_names: list[str]) -> li
         placeholders = ", ".join(["%s"] * len(drug_names))
         cursor.execute(
             f"""
-            SELECT claim_id, supplement_canonical_ko, drug_canonical_ko,
+            SELECT claim_id, supplement_canonical_ko, canonical_drug_id, drug_canonical_ko,
                    drug_canonical_en, interaction_text_raw
             FROM standardized_interactions
             WHERE supplement_id = %s
@@ -156,7 +170,7 @@ def _query_interactions(cursor, supplement_id: str, drug_names: list[str]) -> li
     else:
         cursor.execute(
             """
-            SELECT claim_id, supplement_canonical_ko, drug_canonical_ko,
+            SELECT claim_id, supplement_canonical_ko, canonical_drug_id, drug_canonical_ko,
                    drug_canonical_en, interaction_text_raw
             FROM standardized_interactions
             WHERE supplement_id = %s
@@ -164,6 +178,22 @@ def _query_interactions(cursor, supplement_id: str, drug_names: list[str]) -> li
             (supplement_id,),
         )
     return cursor.fetchall()
+
+
+def _resolved_supplements(supplements: list[AnalyzeItem]) -> list[dict]:
+    """분석 후보 건강기능식품을 canonical supplement 기준으로 중복 제거."""
+    resolved_items: list[dict] = []
+    seen: set[str] = set()
+    for supp in supplements:
+        resolved = resolve_supplement(supp.name)
+        if not resolved or resolved.supplement_id in seen:
+            continue
+        seen.add(resolved.supplement_id)
+        resolved_items.append({
+            "id": resolved.supplement_id,
+            "label": resolved.canonical_name_ko,
+        })
+    return resolved_items
 
 
 @router.post("/interactions/analyze", response_model=AnalyzeResponse)
@@ -178,13 +208,16 @@ def analyze_interactions(body: AnalyzeRequest):
     lang = parse_lang(body.lang)
     supplements = [it for it in body.items if it.category == "건강기능식품 라벨"]
     drugs = [it for it in body.items if it.category == "알약"]
-    drug_names = [d.name for d in drugs]
+    drug_names = _clean_unique([d.name for d in drugs])
 
     if not supplements:
         return AnalyzeResponse(
             overall="safe",
             summary=get_summary("no_supplements", lang),
             pairs=[],
+            checkedCount=0,
+            detectedCount=0,
+            undetectedCount=0,
         )
 
     conn = None
@@ -195,30 +228,43 @@ def analyze_interactions(body: AnalyzeRequest):
 
         pairs: list[InteractionPair] = []
         pair_id = 0
+        detected_keys: set[tuple[str, str]] = set()
+        resolved_supplements = _resolved_supplements(supplements)
+        resolved_drugs = _resolve_drugs(cursor, drug_names)
+        drug_ids = [row["canonical_drug_id"] for row in resolved_drugs]
+        checked_count = len(resolved_supplements) * len(drug_ids) if drug_ids else 0
 
-        for supp in supplements:
-            resolved = resolve_supplement(supp.name)
-            if not resolved:
-                continue
-
-            rows = _query_interactions(cursor, resolved.supplement_id, drug_names)
+        for supp in resolved_supplements:
+            rows = _query_interactions(cursor, supp["id"], drug_ids, drug_names)
             for row in rows:
                 level = _infer_level(row["interaction_text_raw"])
+                if level == "safe":
+                    continue
+
                 drug_label = row["drug_canonical_ko"] or row["drug_canonical_en"] or "알 수 없는 약물"
+                drug_key = row.get("canonical_drug_id") or drug_label
+                detected_keys.add((supp["id"], drug_key))
                 pair_id += 1
                 description = row["interaction_text_raw"] or "상호작용 정보가 있습니다."
                 pairs.append(InteractionPair(
                     id=str(pair_id),
-                    items=[resolved.canonical_name_ko, drug_label],
+                    items=[supp["label"], drug_label],
                     level=level,
                     description=translate(description, lang),
                 ))
+
+        detected_count = len(detected_keys)
+        checked_count = max(checked_count, detected_count)
+        undetected_count = max(checked_count - detected_count, 0)
 
         if not pairs:
             return AnalyzeResponse(
                 overall="safe",
                 summary=get_summary("no_interactions", lang),
                 pairs=[],
+                checkedCount=checked_count,
+                detectedCount=detected_count,
+                undetectedCount=undetected_count,
             )
 
         pairs.sort(key=lambda p: LEVEL_RANK[p.level], reverse=True)
@@ -228,6 +274,9 @@ def analyze_interactions(body: AnalyzeRequest):
             overall=overall,
             summary=get_summary(overall, lang),
             pairs=pairs,
+            checkedCount=checked_count,
+            detectedCount=detected_count,
+            undetectedCount=undetected_count,
         )
 
     except Exception as e:

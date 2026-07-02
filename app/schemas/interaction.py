@@ -46,6 +46,9 @@ class AnalyzeResponse(BaseModel):
     overall: RiskLevel
     summary: str
     pairs: list[InteractionPair]
+    checkedCount: int = 0
+    detectedCount: int = 0
+    undetectedCount: int = 0
 
 
 class AnalyzeRequest(BaseModel):
