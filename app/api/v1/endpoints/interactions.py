@@ -107,9 +107,10 @@ def _clean_unique(values: list[str]) -> list[str]:
     return cleaned
 
 
-def _resolve_drugs(cursor, drug_names: list[str]) -> list[dict]:
+def _resolve_drugs(cursor, drug_names: list[str]) -> tuple[list[dict], int]:
     """입력된 제품명/성분명을 canonical_drug_entities 행으로 최대한 해석."""
     resolved: list[dict] = []
+    unresolved_count = 0
     seen: set[str] = set()
 
     for clean in _clean_unique(drug_names):
@@ -138,6 +139,9 @@ def _resolve_drugs(cursor, drug_names: list[str]) -> list[dict]:
                 (f"%{clean}%", f"%{clean.lower()}%", clean, clean),
             )
             rows = cursor.fetchall()
+        if not rows:
+            unresolved_count += 1
+            continue
 
         for row in rows:
             drug_id = row["canonical_drug_id"]
@@ -146,11 +150,12 @@ def _resolve_drugs(cursor, drug_names: list[str]) -> list[dict]:
             seen.add(drug_id)
             resolved.append(row)
 
-    return resolved
+    return resolved, unresolved_count
 
 
 def _resolve_drug_ids(cursor, drug_names: list[str]) -> list[str]:
-    return [row["canonical_drug_id"] for row in _resolve_drugs(cursor, drug_names)]
+    resolved, _ = _resolve_drugs(cursor, drug_names)
+    return [row["canonical_drug_id"] for row in resolved]
 
 
 def _query_interactions(cursor, supplement_id: str, drug_ids: list[str], drug_names: list[str]) -> list[dict]:
@@ -248,10 +253,11 @@ def analyze_interactions(body: AnalyzeRequest):
         pair_id = 0
         detected_keys: set[tuple[str, str]] = set()
         resolved_supplements, unresolved_supplement_count = _resolved_supplements(supplement_names)
-        resolved_drugs = _resolve_drugs(cursor, drug_names)
+        resolved_drugs, unresolved_drug_count = _resolve_drugs(cursor, drug_names)
         drug_ids = [row["canonical_drug_id"] for row in resolved_drugs]
         checkable_supplement_count = len(resolved_supplements) + unresolved_supplement_count
-        checked_count = checkable_supplement_count * len(drug_ids) if drug_ids else 0
+        checkable_drug_count = len(drug_ids) + unresolved_drug_count
+        checked_count = checkable_supplement_count * checkable_drug_count if checkable_drug_count else 0
 
         for supp in resolved_supplements:
             rows = _query_interactions(cursor, supp["id"], drug_ids, drug_names)
