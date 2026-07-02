@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException
@@ -147,13 +148,30 @@ def _clean_unique(values: list[str]) -> list[str]:
     return cleaned
 
 
+def _is_non_ingredient_text(value: str) -> bool:
+    clean = value.strip()
+    compact = clean.replace(" ", "")
+    if not compact:
+        return True
+    if compact.upper() in {"PTP", "PVC", "ALU", "AL", "정제", "캡슐"}:
+        return True
+    if re.fullmatch(r"\d+(\.\d+)?(mg|g|mcg|μg|ug|iu|ml|정|캡슐)?", compact, flags=re.IGNORECASE):
+        return True
+    if re.fullmatch(r"\d+/\d+(\.\d+)?(mg|g|mcg|μg|ug|iu|ml)?", compact, flags=re.IGNORECASE):
+        return True
+    if re.search(r"(정|캡슐|연질캡슐|필름코팅정)\d*(\.\d+)?\s*(mg|g|mcg|μg|ug|iu|ml)?$", compact, flags=re.IGNORECASE):
+        return True
+    return False
+
+
 def _resolve_drugs(cursor, drug_names: list[str]) -> tuple[list[dict], int]:
     """입력된 제품명/성분명을 canonical_drug_entities 행으로 최대한 해석."""
     resolved: list[dict] = []
     unresolved_count = 0
     seen: set[str] = set()
 
-    for clean in _clean_unique(drug_names):
+    for clean in _clean_unique([name for name in drug_names if not _is_non_ingredient_text(name)]):
+        normalized = clean.lower().replace(" ", "").replace("-", "").replace("_", "")
         cursor.execute(
             """
             SELECT canonical_drug_id, canonical_name_ko, canonical_name_en
@@ -165,6 +183,19 @@ def _resolve_drugs(cursor, drug_names: list[str]) -> tuple[list[dict], int]:
             (clean, clean),
         )
         rows = cursor.fetchall()
+        if not rows:
+            cursor.execute(
+                """
+                SELECT canonical_drug_id, canonical_name_ko, canonical_name_en
+                FROM canonical_drug_entities
+                WHERE REPLACE(REPLACE(REPLACE(LOWER(canonical_name_ko), ' ', ''), '-', ''), '_', '') = %s
+                   OR REPLACE(REPLACE(REPLACE(LOWER(canonical_name_en), ' ', ''), '-', ''), '_', '') = %s
+                   OR REPLACE(REPLACE(REPLACE(LOWER(raw_aliases), ' ', ''), '-', ''), '_', '') LIKE %s
+                LIMIT 8
+                """,
+                (normalized, normalized, f"%{normalized}%"),
+            )
+            rows = cursor.fetchall()
         if not rows:
             cursor.execute(
                 """
@@ -271,7 +302,8 @@ def analyze_interactions(body: AnalyzeRequest):
     supplements = [it for it in body.items if it.category == "건강기능식품 라벨"]
     drugs = [it for it in body.items if it.category == "알약"]
     supplement_names = _clean_unique([s.name for s in supplements])
-    drug_names = _clean_unique([d.name for d in drugs])
+    ignored_drug_names = [d.name for d in drugs if _is_non_ingredient_text(d.name)]
+    drug_names = _clean_unique([d.name for d in drugs if not _is_non_ingredient_text(d.name)])
 
     if not supplements:
         response = AnalyzeResponse(
@@ -292,6 +324,7 @@ def analyze_interactions(body: AnalyzeRequest):
                 "reason": "no_supplements",
                 "supplementNames": supplement_names,
                 "drugNames": drug_names,
+                "ignoredDrugNames": ignored_drug_names,
             },
         )
         return response
@@ -316,6 +349,7 @@ def analyze_interactions(body: AnalyzeRequest):
         debug_context = {
             "supplementNames": supplement_names,
             "drugNames": drug_names,
+            "ignoredDrugNames": ignored_drug_names,
             "resolvedSupplements": resolved_supplements,
             "unresolvedSupplementCount": unresolved_supplement_count,
             "resolvedDrugs": resolved_drugs,
