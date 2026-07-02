@@ -166,3 +166,21 @@ CREATE TABLE IF NOT EXISTS interaction_pair_source_checks (
     FOREIGN KEY (canonical_drug_id) REFERENCES canonical_drug_entities(canonical_drug_id),
     FOREIGN KEY (source_key) REFERENCES interaction_source_registry(source_key)
 ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS external_agent_mappings (
+    source_key VARCHAR(80) NOT NULL,
+    local_entity_type VARCHAR(50) NOT NULL,
+    local_entity_id VARCHAR(50) NOT NULL,
+    local_name VARCHAR(255),
+    external_id VARCHAR(100) NOT NULL,
+    external_name VARCHAR(255),
+    external_entity_type VARCHAR(50),
+    match_status VARCHAR(100) NOT NULL,
+    match_basis TEXT,
+    matched_alias VARCHAR(255),
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (source_key, local_entity_type, local_entity_id, external_id),
+    KEY idx_external_mapping_local (local_entity_type, local_entity_id),
+    KEY idx_external_mapping_external (source_key, external_id),
+    FOREIGN KEY (source_key) REFERENCES interaction_source_registry(source_key)
+) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;

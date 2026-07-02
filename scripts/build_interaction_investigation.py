@@ -69,8 +69,8 @@ SOURCE_REGISTRY = [
         "source_name": "Supp.ai",
         "source_url": "https://supp.ai/",
         "source_type": "external_dataset",
-        "ingestion_status": "planned",
-        "notes": "건강보조제-약물 상호작용 공개 DB 후보",
+        "ingestion_status": "ingested",
+        "notes": "scripts/import_supp_ai_evidence.py로 공개 bulk dataset evidence sentence 적재",
     },
     {
         "source_key": "idisk2",
@@ -173,7 +173,11 @@ ON DUPLICATE KEY UPDATE
     source_name = VALUES(source_name),
     source_url = VALUES(source_url),
     source_type = VALUES(source_type),
-    ingestion_status = VALUES(ingestion_status),
+    ingestion_status = IF(
+        ingestion_status = 'ingested' AND VALUES(ingestion_status) = 'planned',
+        ingestion_status,
+        VALUES(ingestion_status)
+    ),
     notes = VALUES(notes)
 """
 
@@ -205,6 +209,16 @@ ON DUPLICATE KEY UPDATE
     evidence_count = VALUES(evidence_count),
     checked_at = VALUES(checked_at),
     notes = VALUES(notes)
+"""
+
+INSERT_PENDING_SOURCE_CHECK_SQL = """
+INSERT INTO interaction_pair_source_checks (
+    supplement_id, canonical_drug_id, source_key,
+    check_status, evidence_count, checked_at, notes
+)
+VALUES (%s, %s, %s, %s, %s, %s, %s)
+ON DUPLICATE KEY UPDATE
+    updated_at = updated_at
 """
 
 
@@ -343,7 +357,11 @@ def write_current_source_checks(cursor, pairs: list[tuple[str, str]]) -> tuple[i
 
 
 def write_pending_source_checks(cursor, pairs: list[tuple[str, str]]) -> int:
-    planned_sources = [source["source_key"] for source in SOURCE_REGISTRY if source["source_key"] != CURRENT_SOURCE_KEY]
+    planned_sources = [
+        source["source_key"]
+        for source in SOURCE_REGISTRY
+        if source["source_key"] != CURRENT_SOURCE_KEY and source["ingestion_status"] == "planned"
+    ]
     now = datetime.now(UTC).replace(tzinfo=None)
     total = 0
     batch: list[tuple] = []
@@ -362,10 +380,10 @@ def write_pending_source_checks(cursor, pairs: list[tuple[str, str]]) -> int:
             )
             total += 1
             if len(batch) >= 1000:
-                cursor.executemany(INSERT_SOURCE_CHECK_SQL, batch)
+                cursor.executemany(INSERT_PENDING_SOURCE_CHECK_SQL, batch)
                 batch.clear()
     if batch:
-        cursor.executemany(INSERT_SOURCE_CHECK_SQL, batch)
+        cursor.executemany(INSERT_PENDING_SOURCE_CHECK_SQL, batch)
     return total
 
 
