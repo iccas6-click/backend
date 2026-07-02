@@ -30,6 +30,21 @@ CREATE TABLE IF NOT EXISTS canonical_drug_entities (
     notes TEXT
 ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS pill_product_ingredients (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    product_code VARCHAR(50),
+    product_name VARCHAR(255) NOT NULL,
+    normalized_product_name VARCHAR(255) NOT NULL,
+    ingredient_name VARCHAR(255) NOT NULL,
+    normalized_ingredient_name VARCHAR(255) NOT NULL,
+    canonical_drug_id VARCHAR(50) NOT NULL,
+    source_name VARCHAR(255),
+    UNIQUE KEY uq_product_ingredient (product_code, normalized_product_name, normalized_ingredient_name),
+    KEY idx_pill_product_norm (normalized_product_name),
+    KEY idx_pill_ingredient_norm (normalized_ingredient_name),
+    FOREIGN KEY (canonical_drug_id) REFERENCES canonical_drug_entities(canonical_drug_id)
+) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS standardized_interactions (
     claim_id VARCHAR(50) PRIMARY KEY,
     raw_id VARCHAR(50),

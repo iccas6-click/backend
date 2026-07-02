@@ -37,6 +37,26 @@ KNOWN_PRODUCT_TEXTS = {
 }
 
 
+def _normalize_match_key(value: str) -> str:
+    return re.sub(r"[\s\-_()/·ㆍ.,]+", "", value.strip().lower())
+
+
+def _product_lookup_keys(value: str) -> list[str]:
+    compact = _normalize_match_key(value)
+    without_packaging = re.sub(r"(ptp|pvc|alu|al)$", "", compact, flags=re.IGNORECASE)
+    without_units = re.sub(r"\d+(\.\d+)?(mg|g|mcg|μg|ug|iu|ml)?", "", without_packaging, flags=re.IGNORECASE)
+    without_form = re.sub(r"(연질캡슐|필름코팅정|캡슐|정)$", "", without_units)
+    keys = [compact, without_packaging, without_units, without_form]
+    result: list[str] = []
+    seen: set[str] = set()
+    for key in keys:
+        if len(key) < 3 or key in seen:
+            continue
+        seen.add(key)
+        result.append(key)
+    return result
+
+
 def _model_dump(model) -> dict:
     if hasattr(model, "model_dump"):
         return model.model_dump()
@@ -176,14 +196,70 @@ def _is_non_ingredient_text(value: str) -> bool:
     return False
 
 
+def _resolve_product_ingredients(cursor, drug_names: list[str]) -> tuple[list[dict], set[str]]:
+    """AIHub 1000종 제품명으로 들어온 값을 제품 성분 canonical drug rows로 확장."""
+    resolved: list[dict] = []
+    matched_inputs: set[str] = set()
+    seen_ids: set[str] = set()
+
+    for clean in _clean_unique(drug_names):
+        normalized = _normalize_match_key(clean)
+        product_keys = _product_lookup_keys(clean)
+        like_keys = [key for key in product_keys if key != normalized]
+        cursor.execute(
+            """
+            SELECT ppi.canonical_drug_id, cde.canonical_name_ko, cde.canonical_name_en
+            FROM pill_product_ingredients ppi
+            JOIN canonical_drug_entities cde ON ppi.canonical_drug_id = cde.canonical_drug_id
+            WHERE ppi.product_name = %s
+               OR ppi.normalized_product_name = %s
+               OR ppi.normalized_product_name LIKE %s
+               OR ppi.normalized_product_name LIKE %s
+               OR ppi.normalized_product_name LIKE %s
+            ORDER BY ppi.id
+            """,
+            (
+                clean,
+                normalized,
+                f"%{like_keys[0]}%" if len(like_keys) > 0 else "__NO_MATCH__",
+                f"%{like_keys[1]}%" if len(like_keys) > 1 else "__NO_MATCH__",
+                f"%{like_keys[2]}%" if len(like_keys) > 2 else "__NO_MATCH__",
+            ),
+        )
+        rows = cursor.fetchall()
+        if not rows:
+            continue
+        matched_inputs.add(clean)
+        for row in rows:
+            drug_id = row["canonical_drug_id"]
+            if drug_id in seen_ids:
+                continue
+            seen_ids.add(drug_id)
+            resolved.append(row)
+
+    return resolved, matched_inputs
+
+
 def _resolve_drugs(cursor, drug_names: list[str]) -> tuple[list[dict], int]:
     """입력된 제품명/성분명을 canonical_drug_entities 행으로 최대한 해석."""
     resolved: list[dict] = []
     unresolved_count = 0
     seen: set[str] = set()
 
-    for clean in _clean_unique([name for name in drug_names if not _is_non_ingredient_text(name)]):
-        normalized = clean.lower().replace(" ", "").replace("-", "").replace("_", "")
+    product_rows, product_inputs = _resolve_product_ingredients(cursor, drug_names)
+    for row in product_rows:
+        drug_id = row["canonical_drug_id"]
+        seen.add(drug_id)
+        resolved.append(row)
+
+    ingredient_candidates = [
+        name
+        for name in drug_names
+        if name not in product_inputs and not _is_non_ingredient_text(name)
+    ]
+
+    for clean in _clean_unique(ingredient_candidates):
+        normalized = _normalize_match_key(clean)
         cursor.execute(
             """
             SELECT canonical_drug_id, canonical_name_ko, canonical_name_en
@@ -200,9 +276,9 @@ def _resolve_drugs(cursor, drug_names: list[str]) -> tuple[list[dict], int]:
                 """
                 SELECT canonical_drug_id, canonical_name_ko, canonical_name_en
                 FROM canonical_drug_entities
-                WHERE REPLACE(REPLACE(REPLACE(LOWER(canonical_name_ko), ' ', ''), '-', ''), '_', '') = %s
-                   OR REPLACE(REPLACE(REPLACE(LOWER(canonical_name_en), ' ', ''), '-', ''), '_', '') = %s
-                   OR REPLACE(REPLACE(REPLACE(LOWER(raw_aliases), ' ', ''), '-', ''), '_', '') LIKE %s
+                WHERE REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LOWER(canonical_name_ko), ' ', ''), '-', ''), '_', ''), '/', ''), '(', ''), ')', ''), '.', '') = %s
+                   OR REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LOWER(canonical_name_en), ' ', ''), '-', ''), '_', ''), '/', ''), '(', ''), ')', ''), '.', '') = %s
+                   OR REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LOWER(raw_aliases), ' ', ''), '-', ''), '_', ''), '/', ''), '(', ''), ')', ''), '.', '') LIKE %s
                 LIMIT 8
                 """,
                 (normalized, normalized, f"%{normalized}%"),
