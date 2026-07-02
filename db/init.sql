@@ -73,6 +73,29 @@ CREATE TABLE IF NOT EXISTS standardized_interactions (
     FOREIGN KEY (canonical_drug_id) REFERENCES canonical_drug_entities(canonical_drug_id)
 ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS ingredient_interaction_matrix (
+    supplement_id VARCHAR(50) NOT NULL,
+    supplement_name VARCHAR(255),
+    canonical_drug_id VARCHAR(50) NOT NULL,
+    drug_name VARCHAR(255),
+    risk_level VARCHAR(50) NOT NULL,
+    needs_attention TINYINT(1) NOT NULL DEFAULT 0,
+    evidence_status VARCHAR(100) NOT NULL,
+    reason TEXT,
+    claim_count INT NOT NULL DEFAULT 0,
+    claim_ids TEXT,
+    source_names TEXT,
+    source_urls TEXT,
+    source_review_statuses TEXT,
+    overall_review_statuses TEXT,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (supplement_id, canonical_drug_id),
+    KEY idx_matrix_risk (risk_level),
+    KEY idx_matrix_attention (needs_attention),
+    FOREIGN KEY (supplement_id) REFERENCES supplement_map(supplement_id),
+    FOREIGN KEY (canonical_drug_id) REFERENCES canonical_drug_entities(canonical_drug_id)
+) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS raw_interactions (
     raw_id VARCHAR(50) PRIMARY KEY,
     supplement_name_raw VARCHAR(255),

@@ -155,14 +155,10 @@ def _infer_level(text: str | None) -> RiskLevel:
     if not text:
         return "safe"
     danger_kw = ["금기", "심각", "위험", "사망", "피해야", "절대"]
-    caution_kw = ["주의", "감소", "증가", "영향", "모니터", "확인", "조절", "상호작용", "출혈"]
     for kw in danger_kw:
         if kw in text:
             return "danger"
-    for kw in caution_kw:
-        if kw in text:
-            return "caution"
-    return "safe"
+    return "caution"
 
 
 def _clean_unique(values: list[str]) -> list[str]:
