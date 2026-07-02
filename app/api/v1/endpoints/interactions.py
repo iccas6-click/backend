@@ -93,9 +93,54 @@ def _infer_level(text: str | None) -> RiskLevel:
     return "safe"
 
 
+def _resolve_drug_ids(cursor, drug_names: list[str]) -> list[str]:
+    """입력된 제품명/성분명을 canonical_drug_entities의 ID로 최대한 해석."""
+    resolved: list[str] = []
+    seen: set[str] = set()
+
+    for name in drug_names:
+        clean = name.strip()
+        if not clean:
+            continue
+        cursor.execute(
+            """
+            SELECT canonical_drug_id
+            FROM canonical_drug_entities
+            WHERE canonical_name_ko = %s
+               OR canonical_name_en = %s
+               OR raw_aliases LIKE %s
+               OR %s LIKE CONCAT('%', canonical_name_ko, '%')
+               OR %s LIKE CONCAT('%', canonical_name_en, '%')
+            LIMIT 8
+            """,
+            (clean, clean, f"%{clean}%", clean, clean),
+        )
+        for row in cursor.fetchall():
+            drug_id = row["canonical_drug_id"]
+            if drug_id in seen:
+                continue
+            seen.add(drug_id)
+            resolved.append(drug_id)
+
+    return resolved
+
+
 def _query_interactions(cursor, supplement_id: str, drug_names: list[str]) -> list[dict]:
     """supplement_id로 상호작용 조회. drug_names가 있으면 해당 약물만 필터."""
-    if drug_names:
+    drug_ids = _resolve_drug_ids(cursor, drug_names)
+    if drug_ids:
+        placeholders = ", ".join(["%s"] * len(drug_ids))
+        cursor.execute(
+            f"""
+            SELECT claim_id, supplement_canonical_ko, drug_canonical_ko,
+                   drug_canonical_en, interaction_text_raw
+            FROM standardized_interactions
+            WHERE supplement_id = %s
+              AND canonical_drug_id IN ({placeholders})
+            """,
+            (supplement_id, *drug_ids),
+        )
+    elif drug_names:
         placeholders = ", ".join(["%s"] * len(drug_names))
         cursor.execute(
             f"""
@@ -103,9 +148,10 @@ def _query_interactions(cursor, supplement_id: str, drug_names: list[str]) -> li
                    drug_canonical_en, interaction_text_raw
             FROM standardized_interactions
             WHERE supplement_id = %s
-              AND drug_canonical_ko IN ({placeholders})
+              AND (drug_canonical_ko IN ({placeholders})
+                   OR drug_canonical_en IN ({placeholders}))
             """,
-            (supplement_id, *drug_names),
+            (supplement_id, *drug_names, *drug_names),
         )
     else:
         cursor.execute(
