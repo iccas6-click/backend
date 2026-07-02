@@ -26,6 +26,16 @@ router = APIRouter()
 ANALYZE_DEBUG_LOG_PATH = os.getenv("CLICK_ANALYZE_DEBUG_LOG_PATH", "/tmp/click-analyze-debug.jsonl")
 ANALYZE_DEBUG_LATEST_PATH = os.getenv("CLICK_ANALYZE_DEBUG_LATEST_PATH", "/tmp/click-last-analyze.json")
 
+KNOWN_PRODUCT_TEXTS = {
+    "리보테인",
+    "텔미누보",
+    "텔미누보40",
+    "바스크롱",
+    "이티민",
+    "큐자임",
+    "오메콜에프",
+}
+
 
 def _model_dump(model) -> dict:
     if hasattr(model, "model_dump"):
@@ -160,6 +170,8 @@ def _is_non_ingredient_text(value: str) -> bool:
     if re.fullmatch(r"\d+/\d+(\.\d+)?(mg|g|mcg|μg|ug|iu|ml)?", compact, flags=re.IGNORECASE):
         return True
     if re.search(r"(정|캡슐|연질캡슐|필름코팅정)\d*(\.\d+)?\s*(mg|g|mcg|μg|ug|iu|ml)?$", compact, flags=re.IGNORECASE):
+        return True
+    if compact in KNOWN_PRODUCT_TEXTS:
         return True
     return False
 
