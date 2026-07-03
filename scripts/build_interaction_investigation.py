@@ -53,8 +53,8 @@ SOURCE_REGISTRY = [
         "source_name": "식품의약품안전처 의약품개요정보 e약은요 OpenAPI",
         "source_url": "https://www.data.go.kr/data/15075057/openapi.do",
         "source_type": "public_api",
-        "ingestion_status": "planned",
-        "notes": "intrcQesitm 문항을 약-음식/건강기능식품 상호작용 후보 근거로 수집 예정",
+        "ingestion_status": "ingested",
+        "notes": "scripts/import_mfds_e_drug_evidence.py로 intrcQesitm 문항을 수집해 현 DB 성분 조합에 매칭",
     },
     {
         "source_key": "mfds_hid_live",
