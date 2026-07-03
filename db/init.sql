@@ -184,3 +184,15 @@ CREATE TABLE IF NOT EXISTS external_agent_mappings (
     KEY idx_external_mapping_external (source_key, external_id),
     FOREIGN KEY (source_key) REFERENCES interaction_source_registry(source_key)
 ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS domestic_source_raw_records (
+    source_key VARCHAR(80) NOT NULL,
+    source_record_id VARCHAR(100) NOT NULL,
+    title VARCHAR(255),
+    source_url TEXT,
+    raw_payload_json JSON,
+    retrieved_at TIMESTAMP NULL,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (source_key, source_record_id),
+    FOREIGN KEY (source_key) REFERENCES interaction_source_registry(source_key)
+) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;

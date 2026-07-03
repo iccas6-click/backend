@@ -57,6 +57,22 @@ SOURCE_REGISTRY = [
         "notes": "intrcQesitm 문항을 약-음식/건강기능식품 상호작용 후보 근거로 수집 예정",
     },
     {
+        "source_key": "mfds_hid_live",
+        "source_name": "식품의약품안전처 건강기능식품 종합정보 서비스 의약품 병용섭취정보",
+        "source_url": "https://data.mfds.go.kr/hid/opeaa01/drugUsjntIntkAttnMttrLst.do",
+        "source_type": "public_web",
+        "ingestion_status": "ingested",
+        "notes": "scripts/import_mfds_hid_live_evidence.py로 공개 상세 페이지를 직접 수집",
+    },
+    {
+        "source_key": "mfds_health_functional_food_openapi",
+        "source_name": "식품의약품안전처 건강기능식품정보 OpenAPI",
+        "source_url": "https://www.data.go.kr/data/15056760/openapi.do",
+        "source_type": "public_api",
+        "ingestion_status": "planned",
+        "notes": "MFDS_API_KEY 또는 DATA_GO_KR_SERVICE_KEY 필요",
+    },
+    {
         "source_key": "mfds_dur_ingredient_openapi",
         "source_name": "식품의약품안전처 DUR 성분정보 OpenAPI",
         "source_url": "https://www.data.go.kr/data/15056780/openapi.do",
