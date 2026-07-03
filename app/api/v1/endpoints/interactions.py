@@ -199,16 +199,33 @@ def _looks_like_pill_product_text(value: str) -> bool:
     return bool(re.search(r"(서방정|발포정|장용정|필름코팅정|연질캡슐|캡슐|정)", compact))
 
 
+def _table_exists(cursor, table_name: str) -> bool:
+    cursor.execute(
+        """
+        SELECT COUNT(*) AS count
+        FROM information_schema.tables
+        WHERE table_schema = DATABASE()
+          AND table_name = %s
+        """,
+        (table_name,),
+    )
+    row = cursor.fetchone()
+    return bool(row and row["count"] > 0)
+
+
 def _resolve_product_ingredients(cursor, drug_names: list[str]) -> tuple[list[dict], set[str]]:
     """AIHub 1000종 제품명으로 들어온 값을 제품 성분 canonical drug rows로 확장."""
     resolved: list[dict] = []
     matched_inputs: set[str] = set()
     seen_ids: set[str] = set()
 
+    if not _table_exists(cursor, "pill_product_ingredients"):
+        return resolved, matched_inputs
+
     for clean in _clean_unique(drug_names):
-        if not _looks_like_pill_product_text(clean):
-            continue
         normalized = _normalize_match_key(clean)
+        if len(normalized) < 3:
+            continue
         product_keys = _product_lookup_keys(clean)
         like_keys = [key for key in product_keys if key != normalized]
         cursor.execute(
