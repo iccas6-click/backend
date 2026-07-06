@@ -26,6 +26,8 @@ class ResolvedSupplement:
 
 def resolve_supplement(name: str) -> Optional[ResolvedSupplement]:
     """성분명으로 supplement_map 엔트리를 찾아 반환. 없으면 None."""
+    clean = name.strip()
+    normalized = clean.lower().replace(" ", "").replace("-", "").replace("_", "")
     conn = get_conn()
     cursor = conn.cursor(dictionary=True)
     try:
@@ -37,16 +39,16 @@ def resolve_supplement(name: str) -> Optional[ResolvedSupplement]:
             WHERE canonical_name_ko = %s OR raw_name = %s
             LIMIT 1
             """,
-            (name, name),
+            (clean, clean),
         )
         row = cursor.fetchone()
         if row:
-            match_type = "exact_canonical" if row["canonical_name_ko"] == name else "exact_raw"
+            match_type = "exact_canonical" if row["canonical_name_ko"] == clean else "exact_raw"
             return ResolvedSupplement(
                 supplement_id=row["supplement_id"],
                 canonical_name_ko=row["canonical_name_ko"],
                 canonical_name_en=row["canonical_name_en"],
-                matched_alias=name,
+                matched_alias=clean,
                 match_type=match_type,
             )
 
@@ -59,7 +61,7 @@ def resolve_supplement(name: str) -> Optional[ResolvedSupplement]:
             WHERE sa.alias = %s
             LIMIT 1
             """,
-            (name,),
+            (clean,),
         )
         row = cursor.fetchone()
         if row:
@@ -71,25 +73,53 @@ def resolve_supplement(name: str) -> Optional[ResolvedSupplement]:
                 match_type="exact_alias",
             )
 
-        # 3) 부분 일치 (canonical_name_ko, raw_name, alias) — 가장 짧은 이름 우선
+        # 3) 띄어쓰기/하이픈/대소문자 차이를 무시한 정확 일치
+        cursor.execute(
+            """
+            SELECT supplement_id, canonical_name_ko, canonical_name_en,
+                   canonical_name_ko AS matched, 'canonical_normalized' AS src
+            FROM supplement_map
+            WHERE REPLACE(REPLACE(REPLACE(LOWER(canonical_name_ko), ' ', ''), '-', ''), '_', '') = %s
+               OR REPLACE(REPLACE(REPLACE(LOWER(raw_name), ' ', ''), '-', ''), '_', '') = %s
+            UNION ALL
+            SELECT sm.supplement_id, sm.canonical_name_ko, sm.canonical_name_en,
+                   sa.alias AS matched, 'alias_normalized' AS src
+            FROM supplement_aliases sa
+            JOIN supplement_map sm ON sa.supplement_id = sm.supplement_id
+            WHERE REPLACE(REPLACE(REPLACE(LOWER(sa.alias), ' ', ''), '-', ''), '_', '') = %s
+            LIMIT 1
+            """,
+            (normalized, normalized, normalized),
+        )
+        row = cursor.fetchone()
+        if row:
+            return ResolvedSupplement(
+                supplement_id=row["supplement_id"],
+                canonical_name_ko=row["canonical_name_ko"],
+                canonical_name_en=row["canonical_name_en"],
+                matched_alias=row["matched"],
+                match_type="normalized",
+            )
+
+        # 4) 부분 일치 (canonical_name_ko, raw_name, alias) — 가장 짧은 이름 우선
         cursor.execute(
             """
             SELECT supplement_id, canonical_name_ko, canonical_name_en,
                    canonical_name_ko AS matched, 'canonical' AS src,
                    LENGTH(canonical_name_ko) AS name_len
             FROM supplement_map
-            WHERE canonical_name_ko LIKE %s OR raw_name LIKE %s
+            WHERE canonical_name_ko LIKE %s OR raw_name LIKE %s OR %s LIKE CONCAT('%', canonical_name_ko, '%')
             UNION ALL
             SELECT sm.supplement_id, sm.canonical_name_ko, sm.canonical_name_en,
                    sa.alias AS matched, 'alias' AS src,
                    LENGTH(sa.alias) AS name_len
             FROM supplement_aliases sa
             JOIN supplement_map sm ON sa.supplement_id = sm.supplement_id
-            WHERE sa.alias LIKE %s
+            WHERE sa.alias LIKE %s OR %s LIKE CONCAT('%', sa.alias, '%')
             ORDER BY name_len ASC
             LIMIT 1
             """,
-            (f"%{name}%", f"%{name}%", f"%{name}%"),
+            (f"%{clean}%", f"%{clean}%", clean, f"%{clean}%", clean),
         )
         row = cursor.fetchone()
         if row:

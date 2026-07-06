@@ -10,11 +10,19 @@
 
 | 서버 | 담당 | 주소 | 용도 |
 |---|---|---|---|
-| 백엔드 | 강민 | `http://localhost:8000` | 상호작용 분석 |
-| supplement 서버 | 강민 | `http://localhost:8002` | 건강기능식품 라벨 인식 |
-| pill 서버 | 팀원 담당 | 별도 주소 확인 필요 | 알약 인식 |
+| 백엔드 | backend 레포 | `http://localhost:8000` 또는 tunnel URL | 상호작용 분석, 성분 매칭 |
+| supplement 서버 | ai 레포 | `http://localhost:8001` 또는 tunnel URL | 건강기능식품 라벨 인식 |
+| pill 서버 | ai 레포 | `http://localhost:8001` 또는 별도 pill API port | 알약 인식 |
 
-> pill 서버 주소는 팀원에게 따로 확인하세요.
+프론트는 Expo 환경변수로 각 서버 주소를 받습니다.
+
+```env
+EXPO_PUBLIC_BACKEND_URL=https://backend.example.com
+EXPO_PUBLIC_SUPPLEMENT_AI_URL=https://supplement-ai.example.com
+EXPO_PUBLIC_PILL_AI_URL=https://pill-ai.example.com
+```
+
+동일 AI 서버에서 supplement/pill endpoint를 모두 노출하는 경우 `EXPO_PUBLIC_SUPPLEMENT_AI_URL`과 `EXPO_PUBLIC_PILL_AI_URL`을 같은 값으로 둘 수 있습니다.
 
 ---
 
@@ -76,44 +84,30 @@ uvicorn app.main:app --reload --port 8002
 
 ### 4-1. 서버 주소 설정
 
-`services/ocr.ts`의 `API_BASE_URL`을 서버 주소로 채워야 합니다:
+프론트는 코드 상수 대신 Expo public env를 사용합니다.
+
+| 변수 | 연결 대상 |
+|---|---|
+| `EXPO_PUBLIC_BACKEND_URL` | `/api/v1/interactions/analyze` |
+| `EXPO_PUBLIC_SUPPLEMENT_AI_URL` | `/api/v1/supplement/recognize` 또는 supplement 서버 root |
+| `EXPO_PUBLIC_PILL_AI_URL` | `/recognize` 또는 `/api/v1/pill/recognize` |
+
+Cloudflare Tunnel 또는 ngrok을 사용할 때도 위 값을 tunnel URL로 바꾸면 됩니다.
+
+### 4-2. 분석 API 요청 바디
+
+백엔드는 `name`과 `category`를 기준으로 분석합니다. `dosage`는 프론트 표시용으로 둘 수 있지만 API 분석에는 필요하지 않습니다.
 
 ```ts
-// 현재 (목업 모드)
-export const API_BASE_URL = '';
-
-// 로컬 개발 시
-export const API_BASE_URL = 'http://localhost:8000';
-
-// 외부 접근 시 (Cloudflare Tunnel 등)
-export const API_BASE_URL = 'https://xxxx.trycloudflare.com';
+{
+  items: items.map((it) => ({ name: it.name, category: it.category })),
+  lang: "ko"
+}
 ```
 
-### 4-2. 분석 API 경로 수정
+알약 `name`에는 제품명 또는 성분명이 들어올 수 있습니다. 제품명은 백엔드의 `pill_product_ingredients`에서 성분으로 확장됩니다.
 
-`services/interactions.ts`의 호출 경로를 수정해야 합니다:
-
-```ts
-// 현재 코드 (잘못된 경로)
-`${API_BASE_URL}/api/interactions`
-
-// 수정 후 (실제 경로)
-`${API_BASE_URL}/api/v1/interactions/analyze`
-```
-
-### 4-3. 요청 바디 수정
-
-백엔드는 `dosage` 필드를 받지 않습니다. `name`과 `category`만 보내면 됩니다:
-
-```ts
-// 현재 코드
-items.map((it) => ({ name: it.name, dosage: it.dosage, category: it.category }))
-
-// 수정 후
-items.map((it) => ({ name: it.name, category: it.category }))
-```
-
-### 4-4. 다국어 지원 (선택)
+### 4-3. 다국어 지원 (선택)
 
 언어 전환 버튼을 구현할 경우 `lang` 필드를 추가해서 보내면 됩니다:
 
@@ -138,11 +132,12 @@ items.map((it) => ({ name: it.name, category: it.category }))
 [2단계] pill 서버
         POST {pill_서버_주소}/recognize
         multipart/form-data, field: file
+        선택 field: recognizer=codeit | retrieval | aihub_classifier
         ↓
         응답에서 약물명 추출:
-        candidates[0].drug_canonical_ko   ← 있으면 우선 사용
-        candidates[0].product_name        ← 없을 때 대체
-        → { name: "아스피린", category: "알약" }
+        candidates[0].product_name / ingredient
+        후보가 여러 개면 프론트에서 Top-3 확인 UI 표시
+        → { name: "제품명 또는 성분명", category: "알약" }
 
 [1단계] 건기식 사진 촬영
         ↓
@@ -152,6 +147,7 @@ items.map((it) => ({ name: it.name, category: it.category }))
         ↓
         응답에서 성분명 추출:
         product.ingredients 배열 각 항목
+        product.product_image_url은 인식 결과 확인 UI에 표시 가능
         → { name: "비타민C", category: "건강기능식품 라벨" }
 
 [3단계] 사용자 확인·수정 화면
@@ -167,7 +163,7 @@ items.map((it) => ({ name: it.name, category: it.category }))
           "lang": "ko"
         }
         ↓
-        응답: { overall, summary, pairs }
+        응답: { overall, summary, pairs, matchedDrugNames, matchedSupplementNames, checkedCount, ... }
 
 [5단계] 결과 화면 표시
 ```
@@ -184,6 +180,15 @@ interface AnalysisResult {
   overall: RiskLevel;       // "danger" | "caution" | "safe"
   summary: string;          // 종합 안내 문구
   pairs: InteractionPair[];
+  matchedDrugNames: string[];
+  matchedSupplementNames: string[];
+  ignoredDrugNames: string[];
+  checkedCount: number;
+  detectedCount: number;
+  undetectedCount: number;
+  unmatchedSupplementCount: number;
+  unmatchedDrugCount: number;
+  unmatchedCombinationCount: number;
 }
 
 interface InteractionPair {
@@ -208,4 +213,6 @@ interface InteractionPair {
 ## 8. 참고
 
 - 전체 API 명세: [`docs/api-spec.md`](api-spec.md)
-- 상호작용 DB에 없는 성분은 자동으로 `safe` 처리됩니다 (실제 안전을 보장하지 않음)
+- `pairs`가 비어 있거나 `undetectedCount`가 크다고 해서 안전 검증이 끝난 것은 아닙니다. 현재 DB에서 주의 근거가 발견되지 않았다는 의미입니다.
+- 알약 인식 엔진은 독립 pill API에서 `recognizer` form field로 선택할 수 있습니다. 현재 지원값은 `codeit`, `retrieval`, `aihub_classifier`입니다.
+- 통합 AI 서버의 `/api/v1/pill/recognize` 래퍼는 기본 recognizer를 사용합니다. recognizer를 프론트에서 바꾸려면 독립 pill API `/recognize` 사용을 권장합니다.

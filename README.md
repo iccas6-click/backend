@@ -14,6 +14,8 @@
 - `claim-target` 관계 관리
 - 검토 상태와 변경 이력 관리
 - 자동 무결성 검증
+- AI 인식 결과의 제품명·성분명을 canonical entity로 해석
+- 약 성분 x 건강기능식품 성분 조합의 현재 DB 기준 주의 근거 조회
 
 ## 범위에 포함하지 않는 것
 
@@ -44,11 +46,35 @@ raw_interactions
 - `review_queue`: 추가 검토가 필요한 source claim, supplement mapping, drug mapping 항목을 관리합니다.
 - `change_log`: 데이터 수정, 검토, 동기화 이력을 기록합니다.
 
+### 현재 API용 분석 지식베이스
+
+앱 연동 브랜치에서는 workbook 원본 테이블 위에 프론트/AI 인식 결과를 바로 분석하기 위한 테이블을 추가로 사용합니다.
+
+```text
+AI 인식 결과
+-> pill_product_ingredients / supplement_aliases
+-> canonical_drug_entities / supplement_map
+-> interaction_evidence_claims
+-> ingredient_interaction_matrix
+-> /api/v1/interactions/analyze
+```
+
+- `pill_product_ingredients`: AIHub 1000종 및 Codeit 인식 제품명을 성분 canonical drug entity로 확장합니다.
+- `supplement_aliases`: 건강기능식품 성분 별칭을 표준 `supplement_map` row로 연결합니다.
+- `interaction_source_registry`: MFDS HID, e약은요 OpenAPI, Supp.ai 등 근거 소스를 등록합니다.
+- `interaction_evidence_claims`: 외부/국내 소스에서 확인한 주의 claim을 표준 조합에 연결합니다.
+- `interaction_pair_source_checks`: 성분 조합을 어떤 소스에서 확인했는지 상태를 기록합니다.
+- `ingredient_interaction_matrix`: 현재 DB에 존재하는 건강기능식품 성분 x 약 성분 전체 조합 판정표입니다. `needs_attention=0`은 안전 보장이 아니라 현재 DB에서 주의 근거가 발견되지 않았다는 뜻입니다.
+
 ## AI 저장소와의 연결
 
-AI 저장소는 제품명, 성분명, 함량, `confidence`, `needs_confirmation`과 같은 인식 결과를 반환하는 역할을 맡을 수 있습니다. backend는 그 결과에 포함된 성분명을 이 저장소의 canonical entity에 연결하고, `standardized_interactions`에서 관련 상호작용을 조회한 뒤 출처와 검토 상태를 함께 반환하는 데이터 계층을 담당합니다.
+AI 저장소는 알약/건강기능식품 이미지에서 제품 후보, 성분명, 공식 이미지 URL, `confidence`, `needs_confirmation`과 같은 인식 결과를 반환합니다. backend는 다음 순서로 결과를 분석합니다.
 
-현재 이 저장소에서 확인되는 것은 workbook 데이터 구조와 읽기 전용 무결성 검증 스크립트입니다. 구체적인 API endpoint, 제품 이미지 처리, 사용자 응답 로직은 이 저장소에 구현된 기능으로 표현하지 않습니다.
+1. 알약 입력이 제품명으로 들어오면 `pill_product_ingredients`에서 실제 성분으로 확장합니다.
+2. 알약 입력이 성분명으로 들어오면 `canonical_drug_entities`와 alias를 기준으로 해석합니다.
+3. 건강기능식품 입력은 `supplement_map`과 `supplement_aliases`로 canonical supplement entity에 연결합니다.
+4. 성분 조합을 `interaction_evidence_claims` 및 기존 `standardized_interactions`에서 조회합니다.
+5. 프론트가 표시할 수 있도록 `pairs`, 매칭된 성분 목록, 미매칭 카운트, 전체 확인 조합 수를 반환합니다.
 
 ## 디렉터리 구조
 
@@ -63,7 +89,12 @@ backend/
 ├── db/
 │   └── init.sql            # MySQL 테이블 생성
 ├── scripts/
-│   └── load_interaction_data.py  # 엑셀 → MySQL 데이터 적재
+│   ├── load_interaction_data.py          # 엑셀 → MySQL 데이터 적재
+│   ├── load_aihub_pill_ingredients.py    # AIHub 제품명-성분 CSV 적재
+│   ├── import_codeit_pill_ingredients.py # Codeit 제품명-성분 매핑 적재
+│   ├── import_mfds_*_evidence.py         # MFDS 근거 수집
+│   ├── import_supp_ai_evidence.py        # Supp.ai 근거 수집
+│   └── build_interaction_matrix.py       # 전체 성분 조합 판정표 생성
 ├── data/source/            # 원본 엑셀 데이터셋
 ├── validation/             # 데이터 무결성 검증 스크립트
 ├── docker-compose.yml
@@ -102,6 +133,22 @@ docker compose up -d
 python scripts/load_interaction_data.py
 ```
 
+앱 연동용 분석 지식베이스까지 구성하려면 다음 순서로 보강 데이터를 적재합니다.
+
+```powershell
+python scripts/add_basic_drug_entities.py
+python scripts/add_basic_nutrient_supplements.py
+python scripts/load_aihub_pill_ingredients.py path/to/aihub_1000_pill_ingredients_slim.csv
+python scripts/import_codeit_pill_ingredients.py
+python scripts/build_interaction_investigation.py
+python scripts/import_mfds_hid_live_evidence.py
+python scripts/import_mfds_e_drug_evidence.py
+python scripts/import_supp_ai_evidence.py
+python scripts/build_interaction_matrix.py
+```
+
+`load_aihub_pill_ingredients.py`는 해당 source의 `pill_product_ingredients` row를 재적재하고, `build_interaction_matrix.py`는 `ingredient_interaction_matrix`를 전체 재빌드합니다.
+
 ### FastAPI 서버 실행
 
 ```powershell
@@ -136,6 +183,14 @@ uvicorn app.main:app --reload
 {
   "overall": "caution",
   "summary": "일부 조합에서 주의가 필요합니다. 전문가와 상담을 권장합니다.",
+  "matchedDrugNames": ["아스피린"],
+  "matchedSupplementNames": ["오메가-3 지방산"],
+  "checkedCount": 1,
+  "detectedCount": 1,
+  "undetectedCount": 0,
+  "unmatchedSupplementCount": 0,
+  "unmatchedDrugCount": 0,
+  "unmatchedCombinationCount": 0,
   "pairs": [
     {
       "id": "1",
