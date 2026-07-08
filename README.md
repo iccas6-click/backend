@@ -26,23 +26,23 @@
 ## 전체 데이터 처리 흐름
 
 ```text
-raw_interactions
--> supplement_map / drug_entity_map
--> canonical_drug_entities
--> standardized_interactions
--> claim_target_map / claim_drug_expansion
--> review_queue / change_log
+source_claims (원문 클레임)
+  + supplement_entities (33종 건기식 표준)
+  + canonical_drug_entities (약물 표준 엔티티)
+→ standardized_interactions (정제된 상호작용)
+
+supplement_info (식약처 제품 DB 44,885건)
+→ supplement_product_markers (성분 파싱 결과)
+→ supplement_entities 매핑
 ```
 
-- `raw_interactions`: 원문에서 수집한 상호작용 claim을 보존합니다.
-- `supplement_map`: 원문 보충제명을 표준 보충제 엔티티로 매핑합니다.
-- `drug_entity_map`: 원문 약물 표현을 표준 약물 엔티티로 매핑합니다.
-- `canonical_drug_entities`: 표준 약물 엔티티와 외부 식별자 상태를 관리합니다.
-- `standardized_interactions`: 원문 claim, 보충제 매핑, 약물 매핑, 검토 상태를 연결한 표준화 상호작용 테이블입니다.
-- `claim_target_map`: 복합 또는 예시 약물 표현이 실제 target 약물 엔티티와 어떻게 연결되는지 관리합니다.
-- `claim_drug_expansion`: 약물 class claim을 개별 약물 엔티티로 확장하는 관계를 관리합니다.
-- `review_queue`: 추가 검토가 필요한 source claim, supplement mapping, drug mapping 항목을 관리합니다.
-- `change_log`: 데이터 수정, 검토, 동기화 이력을 기록합니다.
+- `source_claims`: 원문 출처에서 수집한 상호작용 claim을 보존합니다.
+- `supplement_entities`: 33종 건기식 표준 엔티티를 관리합니다.
+- `canonical_drug_entities`: 표준 약물 엔티티를 관리합니다.
+- `standardized_interactions`: 건기식–약물 상호작용을 세 FK로 연결합니다.
+- `supplement_info`: 식약처 MFDS 건기식 제품 DB입니다.
+- `supplement_product_markers`: supplement_info에서 파싱한 성분 마커입니다.
+- `pill_products` / `drug_aliases` / `pill_product_ingredients`: 알약 인식 side (알약 담당자 관리).
 
 ## AI 저장소와의 연결
 
@@ -59,13 +59,15 @@ backend/
 │   ├── core/               # 설정 (환경변수)
 │   ├── db/                 # DB 연결
 │   ├── schemas/            # Pydantic 응답 스키마
+│   ├── services/           # supplement_resolver, translator
 │   └── main.py             # FastAPI 앱 진입점
 ├── db/
-│   └── init.sql            # MySQL 테이블 생성
-├── scripts/
-│   └── load_interaction_data.py  # 엑셀 → MySQL 데이터 적재
+│   └── init.sql            # MySQL 테이블 생성 (8개 테이블)
+├── docs/
+│   ├── api-spec.md         # API 명세
+│   ├── db-schema.md        # DB 스키마 명세
+│   └── frontend-integration.md
 ├── data/source/            # 원본 엑셀 데이터셋
-├── validation/             # 데이터 무결성 검증 스크립트
 ├── docker-compose.yml
 ├── Dockerfile
 ├── requirements.txt

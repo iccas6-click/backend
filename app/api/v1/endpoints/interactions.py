@@ -17,14 +17,26 @@ from app.services.translator import translate
 
 router = APIRouter()
 
+_INTERACTION_SELECT = """
+    SELECT
+        si.interaction_id,
+        se.supplement_name_ko,
+        cde.canonical_drug_name_ko  AS drug_canonical_ko,
+        cde.canonical_drug_name_en  AS drug_canonical_en,
+        sc.claim_text_original
+    FROM standardized_interactions si
+    JOIN supplement_entities    se  ON si.supplement_id     = se.supplement_id
+    JOIN canonical_drug_entities cde ON si.canonical_drug_id = cde.canonical_drug_id
+    JOIN source_claims           sc  ON si.source_claim_id  = sc.source_claim_id
+"""
+
 
 @router.get("/interactions", response_model=InteractionResponse)
 def get_interactions(supplement: str):
     """
-    건기식 성분명(또는 개별인정원료명/브랜드명)으로 약물 상호작용 조회.
+    건기식 성분명으로 약물 상호작용 조회.
 
-    supplement: 성분명. 개별인정원료 브랜드명(예: TWK10, 오미자추출물)도 입력 가능.
-    alias 테이블을 통해 canonical 성분으로 해석한 뒤 상호작용 정보를 반환.
+    supplement_entities에서 성분을 해석한 뒤 standardized_interactions를 반환.
     """
     resolved = resolve_supplement(supplement)
 
@@ -36,26 +48,13 @@ def get_interactions(supplement: str):
 
         if resolved:
             cursor.execute(
-                """
-                SELECT claim_id, supplement_canonical_ko, drug_canonical_ko,
-                       drug_canonical_en, interaction_text_raw,
-                       source_review_status, overall_review_status
-                FROM standardized_interactions
-                WHERE supplement_id = %s
-                """,
+                _INTERACTION_SELECT + "WHERE si.supplement_id = %s",
                 (resolved.supplement_id,),
             )
         else:
-            # resolve 실패 시 기존 LIKE 방식으로 fallback
             cursor.execute(
-                """
-                SELECT claim_id, supplement_canonical_ko, drug_canonical_ko,
-                       drug_canonical_en, interaction_text_raw,
-                       source_review_status, overall_review_status
-                FROM standardized_interactions
-                WHERE supplement_canonical_ko LIKE %s
-                   OR supplement_canonical_en LIKE %s
-                """,
+                _INTERACTION_SELECT +
+                "WHERE se.supplement_name_ko LIKE %s OR se.supplement_name_en LIKE %s",
                 (f"%{supplement}%", f"%{supplement}%"),
             )
 
@@ -63,7 +62,7 @@ def get_interactions(supplement: str):
 
         return InteractionResponse(
             supplement_name=supplement,
-            resolved_name=resolved.canonical_name_ko if resolved else None,
+            resolved_name=resolved.supplement_name_ko if resolved else None,
             matched_alias=resolved.matched_alias if resolved else None,
             match_type=resolved.match_type if resolved else "not_found",
             interactions=[InteractionResult(**row) for row in rows],
@@ -79,7 +78,7 @@ def get_interactions(supplement: str):
 
 
 def _infer_level(text: str | None) -> RiskLevel:
-    """interaction_text_raw 키워드로 위험도 추론."""
+    """claim_text_original 키워드로 위험도 추론."""
     if not text:
         return "safe"
     danger_kw = ["금기", "심각", "위험", "사망", "피해야", "절대"]
@@ -98,23 +97,13 @@ def _query_interactions(cursor, supplement_id: str, drug_names: list[str]) -> li
     if drug_names:
         placeholders = ", ".join(["%s"] * len(drug_names))
         cursor.execute(
-            f"""
-            SELECT claim_id, supplement_canonical_ko, drug_canonical_ko,
-                   drug_canonical_en, interaction_text_raw
-            FROM standardized_interactions
-            WHERE supplement_id = %s
-              AND drug_canonical_ko IN ({placeholders})
-            """,
+            _INTERACTION_SELECT +
+            f"WHERE si.supplement_id = %s AND cde.canonical_drug_name_ko IN ({placeholders})",
             (supplement_id, *drug_names),
         )
     else:
         cursor.execute(
-            """
-            SELECT claim_id, supplement_canonical_ko, drug_canonical_ko,
-                   drug_canonical_en, interaction_text_raw
-            FROM standardized_interactions
-            WHERE supplement_id = %s
-            """,
+            _INTERACTION_SELECT + "WHERE si.supplement_id = %s",
             (supplement_id,),
         )
     return cursor.fetchall()
@@ -127,7 +116,7 @@ def analyze_interactions(body: AnalyzeRequest):
 
     - 건강기능식품 성분 × 알약 약물 조합을 DB에서 조회
     - 알약이 없으면 건강기능식품 성분 전체 상호작용 반환
-    - interaction_text_raw 키워드로 danger / caution / safe 추론
+    - claim_text_original 키워드로 danger / caution / safe 추론
     """
     lang = parse_lang(body.lang)
     supplements = [it for it in body.items if it.category == "건강기능식품 라벨"]
@@ -157,13 +146,13 @@ def analyze_interactions(body: AnalyzeRequest):
 
             rows = _query_interactions(cursor, resolved.supplement_id, drug_names)
             for row in rows:
-                level = _infer_level(row["interaction_text_raw"])
+                level = _infer_level(row["claim_text_original"])
                 drug_label = row["drug_canonical_ko"] or row["drug_canonical_en"] or "알 수 없는 약물"
                 pair_id += 1
-                description = row["interaction_text_raw"] or "상호작용 정보가 있습니다."
+                description = row["claim_text_original"] or "상호작용 정보가 있습니다."
                 pairs.append(InteractionPair(
                     id=str(pair_id),
-                    items=[resolved.canonical_name_ko, drug_label],
+                    items=[resolved.supplement_name_ko, drug_label],
                     level=level,
                     description=translate(description, lang),
                 ))
