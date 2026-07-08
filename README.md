@@ -100,9 +100,29 @@ docker compose up -d
 
 ### 데이터 적재
 
+`click/drug-supplement schema/drug-supplement schema/processed/` 폴더의 CSV 파일을 읽어 DB에 적재합니다.
+
 ```powershell
+# 전체 적재 (supplement_info 44,885행 포함 — 수 분 소요)
 python scripts/load_interaction_data.py
+
+# supplement_info / supplement_product_markers 생략 (빠른 테스트)
+python scripts/load_interaction_data.py --skip-supplement-info
+
+# processed 폴더 경로를 직접 지정할 경우
+python scripts/load_interaction_data.py --processed-dir "경로/to/processed"
 ```
+
+적재 순서 (FK 의존 순):
+1. `canonical_drug_entities`
+2. `pill_products`
+3. `drug_aliases`
+4. `pill_product_ingredients`
+5. `supplement_entities`
+6. `supplement_info`
+7. `supplement_product_markers`
+8. `source_claims`
+9. `standardized_interactions`
 
 ### FastAPI 서버 실행
 

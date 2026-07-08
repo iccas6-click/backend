@@ -12,6 +12,7 @@ from app.schemas.interaction import (
     LEVEL_RANK,
     RiskLevel,
 )
+from app.services.drug_resolver import resolve_drug
 from app.services.supplement_resolver import resolve_supplement
 from app.services.translator import translate
 
@@ -92,14 +93,14 @@ def _infer_level(text: str | None) -> RiskLevel:
     return "safe"
 
 
-def _query_interactions(cursor, supplement_id: str, drug_names: list[str]) -> list[dict]:
-    """supplement_id로 상호작용 조회. drug_names가 있으면 해당 약물만 필터."""
-    if drug_names:
-        placeholders = ", ".join(["%s"] * len(drug_names))
+def _query_interactions(cursor, supplement_id: str, drug_ids: list[str]) -> list[dict]:
+    """supplement_id로 상호작용 조회. drug_ids가 있으면 해당 canonical_drug_id만 필터."""
+    if drug_ids:
+        placeholders = ", ".join(["%s"] * len(drug_ids))
         cursor.execute(
             _INTERACTION_SELECT +
-            f"WHERE si.supplement_id = %s AND cde.canonical_drug_name_ko IN ({placeholders})",
-            (supplement_id, *drug_names),
+            f"WHERE si.supplement_id = %s AND si.canonical_drug_id IN ({placeholders})",
+            (supplement_id, *drug_ids),
         )
     else:
         cursor.execute(
@@ -121,7 +122,13 @@ def analyze_interactions(body: AnalyzeRequest):
     lang = parse_lang(body.lang)
     supplements = [it for it in body.items if it.category == "건강기능식품 라벨"]
     drugs = [it for it in body.items if it.category == "알약"]
-    drug_names = [d.name for d in drugs]
+
+    # drug_aliases를 통해 canonical_drug_id로 해석
+    drug_ids: list[str] = []
+    for drug in drugs:
+        resolved_drug = resolve_drug(drug.name)
+        if resolved_drug:
+            drug_ids.append(resolved_drug.canonical_drug_id)
 
     if not supplements:
         return AnalyzeResponse(
@@ -144,7 +151,7 @@ def analyze_interactions(body: AnalyzeRequest):
             if not resolved:
                 continue
 
-            rows = _query_interactions(cursor, resolved.supplement_id, drug_names)
+            rows = _query_interactions(cursor, resolved.supplement_id, drug_ids)
             for row in rows:
                 level = _infer_level(row["claim_text_original"])
                 drug_label = row["drug_canonical_ko"] or row["drug_canonical_en"] or "알 수 없는 약물"
