@@ -115,11 +115,16 @@ def clean_unique(values: list[str]) -> list[str]:
     return cleaned
 
 
+def clean_ingredient_name(value: str) -> str:
+    return re.sub(r"\[[A-Za-z]\d{3,}\]", "", value or "").strip()
+
+
 def split_ingredients(raw: str) -> list[str]:
     text = re.sub(r"\([^)]*(?:총량|첨가제|기타)[^)]*\)", " ", raw)
+    text = re.sub(r"\[[A-Za-z]\d{3,}\]", " ", text)
     text = re.sub(r"\b\d+(\.\d+)?\s*(mg|g|mcg|μg|ug|iu|ml|%)\b", " ", text, flags=re.IGNORECASE)
     parts = re.split(r"[|,;/\n]+|ㆍ|·| 및 | 그리고 ", text)
-    return clean_unique([re.sub(r"\s+", " ", part).strip(" :-") for part in parts])
+    return clean_unique([clean_ingredient_name(re.sub(r"\s+", " ", part).strip(" :-")) for part in parts])
 
 
 def official_ingredient_id(name: str) -> str:
@@ -254,6 +259,7 @@ def merge_records(records: list[dict[str, Any]]) -> list[dict[str, str]]:
 
 
 def resolve_or_create_ingredient(cursor, ingredient_name: str) -> str:
+    ingredient_name = clean_ingredient_name(ingredient_name)
     normalized = normalize_name(ingredient_name)
     cursor.execute(
         """

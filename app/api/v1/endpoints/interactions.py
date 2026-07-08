@@ -14,10 +14,15 @@ from app.schemas.interaction import (
     AnalyzeResponse,
     InteractionPair,
     InteractionResponse,
+    LocalizeNamesRequest,
+    LocalizeNamesResponse,
+    LocalizeTextsRequest,
+    LocalizeTextsResponse,
     InteractionResult,
     LEVEL_RANK,
     RiskLevel,
 )
+from app.services.name_localizer import localize_medical_name, localize_names, localize_texts
 from app.services.supplement_resolver import resolve_supplement
 from app.services.translator import translate
 
@@ -88,6 +93,20 @@ def _write_analyze_debug_log(body: AnalyzeRequest, response: AnalyzeResponse, co
     except Exception:
         # 분석 API 자체가 로그 기록 실패 때문에 죽으면 안 된다.
         pass
+
+
+@router.post("/localize/names", response_model=LocalizeNamesResponse)
+def localize_display_names(body: LocalizeNamesRequest):
+    """제품명/성분명 표시용 번역. 원본 DB 값이나 분석용 이름은 변경하지 않는다."""
+    lang = parse_lang(body.lang)
+    return LocalizeNamesResponse(names=localize_names(body.names, lang))
+
+
+@router.post("/localize/texts", response_model=LocalizeTextsResponse)
+def localize_display_texts(body: LocalizeTextsRequest):
+    """복용법처럼 분석에는 쓰지 않는 짧은 표시 문구를 번역한다."""
+    lang = parse_lang(body.lang)
+    return LocalizeTextsResponse(texts=localize_texts(body.texts, lang))
 
 
 @router.get("/interactions", response_model=InteractionResponse)
@@ -233,6 +252,21 @@ def _table_exists(cursor, table_name: str) -> bool:
           AND table_name = %s
         """,
         (table_name,),
+    )
+    row = cursor.fetchone()
+    return bool(row and row["count"] > 0)
+
+
+def _column_exists(cursor, table_name: str, column_name: str) -> bool:
+    cursor.execute(
+        """
+        SELECT COUNT(*) AS count
+        FROM information_schema.columns
+        WHERE table_schema = DATABASE()
+          AND table_name = %s
+          AND column_name = %s
+        """,
+        (table_name, column_name),
     )
     row = cursor.fetchone()
     return bool(row and row["count"] > 0)
@@ -677,6 +711,12 @@ def _query_v2_interactions(cursor, supplement_id: str, drug_ids: list[str], drug
     if not _table_exists(cursor, "v2_standardized_interactions"):
         return []
 
+    risk_level_expr = (
+        "COALESCE(NULLIF(risk_level, ''), 'caution')"
+        if _column_exists(cursor, "v2_standardized_interactions", "risk_level")
+        else "'caution'"
+    )
+
     if drug_ids:
         scope_ids = _expanded_v2_drug_scope_ids(cursor, drug_ids)
         placeholders = ", ".join(["%s"] * len(scope_ids))
@@ -684,7 +724,7 @@ def _query_v2_interactions(cursor, supplement_id: str, drug_ids: list[str], drug
             f"""
             SELECT claim_id, supplement_canonical_ko, canonical_drug_id, drug_canonical_ko,
                    drug_canonical_en, interaction_text_raw,
-                   'caution' AS risk_level,
+                   {risk_level_expr} AS risk_level,
                    1 AS needs_attention,
                    overall_review_status AS evidence_status,
                    source_name AS source_names,
@@ -705,7 +745,7 @@ def _query_v2_interactions(cursor, supplement_id: str, drug_ids: list[str], drug
             f"""
             SELECT claim_id, supplement_canonical_ko, canonical_drug_id, drug_canonical_ko,
                    drug_canonical_en, interaction_text_raw,
-                   'caution' AS risk_level,
+                   {risk_level_expr} AS risk_level,
                    1 AS needs_attention,
                    overall_review_status AS evidence_status,
                    source_name AS source_names,
@@ -721,10 +761,10 @@ def _query_v2_interactions(cursor, supplement_id: str, drug_ids: list[str], drug
         return cursor.fetchall()
 
     cursor.execute(
-        """
+        f"""
         SELECT claim_id, supplement_canonical_ko, canonical_drug_id, drug_canonical_ko,
                drug_canonical_en, interaction_text_raw,
-               'caution' AS risk_level,
+               {risk_level_expr} AS risk_level,
                1 AS needs_attention,
                overall_review_status AS evidence_status,
                source_name AS source_names,
@@ -838,6 +878,7 @@ def _resolve_v2_supplements(cursor, supplement_names: list[str]) -> tuple[list[d
             resolved_items.append({
                 "id": supplement_id,
                 "label": row.get("canonical_name_ko") or row.get("canonical_name_en") or name,
+                "label_en": row.get("canonical_name_en"),
                 "matchedAlias": row.get("matched_alias"),
                 "source": "v0.22",
             })
@@ -867,6 +908,7 @@ def _resolved_supplements(cursor, supplement_names: list[str]) -> tuple[list[dic
         resolved_items.append({
             "id": resolved.supplement_id,
             "label": resolved.canonical_name_ko,
+            "label_en": resolved.canonical_name_en,
             "matchedAlias": resolved.matched_alias,
             "source": "legacy",
         })
@@ -933,12 +975,15 @@ def analyze_interactions(body: AnalyzeRequest):
         ]
         drug_ids = [row["canonical_drug_id"] for row in resolved_drugs]
         matched_drug_names = _clean_unique([
-            name
+            localize_medical_name(row.get("canonical_name_ko") or row.get("canonical_name_en"), lang, row.get("canonical_name_en"))
             for row in resolved_drugs
-            for name in [row["canonical_name_ko"] or row["canonical_name_en"]]
-            if name
+            if row.get("canonical_name_ko") or row.get("canonical_name_en")
         ])
-        matched_supplement_names = _clean_unique([row["label"] for row in resolved_supplements])
+        matched_supplement_names = _clean_unique([
+            localize_medical_name(row.get("label"), lang, row.get("label_en"))
+            for row in resolved_supplements
+            if row.get("label")
+        ])
         total_supplement_count = len(resolved_supplements) + unresolved_supplement_count
         total_drug_count = len(drug_ids) + unresolved_drug_count
         checked_count = len(resolved_supplements) * len(drug_ids) if drug_ids else 0
@@ -972,9 +1017,11 @@ def analyze_interactions(body: AnalyzeRequest):
                     detected_keys.add((supp["id"], drug_key))
                     pair_id += 1
                     description = _interaction_description(row)
+                    supplement_display = localize_medical_name(supp.get("label"), lang, supp.get("label_en"))
+                    drug_display = localize_medical_name(drug_label, lang, row.get("drug_canonical_en"))
                     pairs.append(InteractionPair(
                         id=str(pair_id),
-                        items=[supp["label"], drug_label],
+                        items=[supplement_display, drug_display],
                         level=level,
                         description=translate(description, lang),
                     ))

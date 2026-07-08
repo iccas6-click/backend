@@ -60,3 +60,22 @@ class AnalyzeResponse(BaseModel):
 class AnalyzeRequest(BaseModel):
     items: list[AnalyzeItem]
     lang: str = "ko"  # "ko" | "en" | "fr"
+
+
+
+class LocalizeNamesRequest(BaseModel):
+    names: list[str]
+    lang: str = "ko"
+
+
+class LocalizeNamesResponse(BaseModel):
+    names: dict[str, str]
+
+
+class LocalizeTextsRequest(BaseModel):
+    texts: list[str]
+    lang: str = "ko"
+
+
+class LocalizeTextsResponse(BaseModel):
+    texts: dict[str, str]
