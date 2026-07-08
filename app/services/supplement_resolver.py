@@ -108,14 +108,16 @@ def resolve_supplement(name: str) -> Optional[ResolvedSupplement]:
                    canonical_name_ko AS matched, 'canonical' AS src,
                    LENGTH(canonical_name_ko) AS name_len
             FROM supplement_map
-            WHERE canonical_name_ko LIKE %s OR raw_name LIKE %s OR %s LIKE CONCAT('%', canonical_name_ko, '%')
+            WHERE CHAR_LENGTH(canonical_name_ko) >= 3
+              AND (canonical_name_ko LIKE %s OR raw_name LIKE %s OR %s LIKE CONCAT('%', canonical_name_ko, '%'))
             UNION ALL
             SELECT sm.supplement_id, sm.canonical_name_ko, sm.canonical_name_en,
                    sa.alias AS matched, 'alias' AS src,
                    LENGTH(sa.alias) AS name_len
             FROM supplement_aliases sa
             JOIN supplement_map sm ON sa.supplement_id = sm.supplement_id
-            WHERE sa.alias LIKE %s OR %s LIKE CONCAT('%', sa.alias, '%')
+            WHERE CHAR_LENGTH(sa.alias) >= 3
+              AND (sa.alias LIKE %s OR %s LIKE CONCAT('%', sa.alias, '%'))
             ORDER BY name_len ASC
             LIMIT 1
             """,

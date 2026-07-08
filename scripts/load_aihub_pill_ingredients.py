@@ -11,6 +11,7 @@ CSV 형식:
 3. 분석 API는 이 테이블을 이용해 제품명이 들어와도 성분 조합으로 확장한다.
 
 사용법:
+    python scripts/load_aihub_pill_ingredients.py
     python scripts/load_aihub_pill_ingredients.py /path/to/aihub_1000_pill_ingredients_slim.csv
 """
 from __future__ import annotations
@@ -31,6 +32,12 @@ load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
 from app.db.connection import get_conn
 
 SOURCE_NAME = "AIHub pill 1000 product ingredient slim CSV"
+DEFAULT_CSV_PATH = (
+    Path(__file__).resolve().parents[1]
+    / "data"
+    / "source"
+    / "aihub_1000_pill_ingredients_slim.csv"
+)
 
 CREATE_TABLE_SQL = """
 CREATE TABLE IF NOT EXISTS pill_product_ingredients (
@@ -163,10 +170,24 @@ def read_rows(csv_path: Path) -> list[dict[str, str]]:
         return [row for row in reader if row.get("제품명") and row.get("성분명")]
 
 
+def resolve_csv_path(argv: list[str]) -> Path:
+    if len(argv) > 1:
+        return Path(argv[1])
+    env_path = os.environ.get("AIHUB_PILL_INGREDIENT_CSV")
+    if env_path:
+        return Path(env_path)
+    return DEFAULT_CSV_PATH
+
+
 def main() -> None:
-    csv_path = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(os.environ.get("AIHUB_PILL_INGREDIENT_CSV", ""))
+    csv_path = resolve_csv_path(sys.argv)
     if not csv_path.exists():
-        raise SystemExit(f"CSV 파일 없음: {csv_path}")
+        raise SystemExit(
+            "CSV 파일 없음: "
+            f"{csv_path}\n"
+            "기본 위치는 data/source/aihub_1000_pill_ingredients_slim.csv 입니다. "
+            "다른 파일을 쓰려면 경로를 인자로 넘기거나 AIHUB_PILL_INGREDIENT_CSV를 설정하세요."
+        )
 
     rows = read_rows(csv_path)
     conn = get_conn()
