@@ -2,6 +2,28 @@
 
 이 저장소는 건강기능식품·보충제와 약물 간 상호작용 원문을 보존하고, 이를 표준화된 보충제·약물 엔티티와 연결 구조로 제공하기 위한 backend 데이터 저장소입니다. 현재 데이터셋은 `v0.21` release candidate이며, 연구·프로토타입 데이터베이스와 API 개발을 위한 구조화 데이터를 목표로 합니다.
 
+## 이번 브랜치의 main 대비 변경점
+
+- 앱 분석 결과를 `v2_standardized_interactions` 기반으로 고정했습니다.
+- 처방전·약봉투 AI 인식 결과의 제품명/성분명을 v2 약 성분 엔티티로 우선 매핑합니다.
+- 건강기능식품 라벨 인식 결과를 v2 원료 alias와 exclusion 기준으로 표준화합니다.
+- 공식 의약품 제품/성분 캐시용 테이블과 importer를 추가했습니다.
+- AIHub 1000종 제품-성분 slim CSV와 검색 스크립트를 추가해 legacy fallback 데이터를 보강했습니다.
+- `/api/v1/interactions/analyze` 응답에 checked/detected/unmatched count를 유지해 분석 범위를 프론트에서 표시할 수 있게 했습니다.
+- legacy `standardized_interactions`, `ingredient_interaction_matrix`, Supp.ai 문헌 문장은 앱 결과 표시에서 제외했습니다.
+- phpMyAdmin 포트 설정을 `.env.example`과 docker compose에 추가했습니다.
+
+### 현재 프로토타입 데이터 규모
+
+```text
+v2_standardized_interactions       475 rows
+v2_canonical_drug_entities         178 rows
+v2_drug_ingredient_aliases         384 rows
+v2_official_supplement_ingredients  37 rows
+v2_supplement_label_aliases        200 rows
+pill_product_ingredients          2030 rows
+```
+
 ## 저장소 목적
 
 식약처 원문 기반의 상호작용 claim을 보존하면서, 보충제와 약물 표현을 표준화된 엔티티로 연결합니다. 또한 외부 식별자, claim-target 관계, 검토 상태, 변경 이력을 함께 관리하여 데이터의 출처와 처리 상태를 추적할 수 있게 합니다.

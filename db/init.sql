@@ -45,6 +45,48 @@ CREATE TABLE IF NOT EXISTS pill_product_ingredients (
     FOREIGN KEY (canonical_drug_id) REFERENCES canonical_drug_entities(canonical_drug_id)
 ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS official_drug_products (
+    item_seq VARCHAR(50) PRIMARY KEY,
+    pharm_product_code VARCHAR(80),
+    drug_identification_code VARCHAR(80),
+    product_name VARCHAR(255) NOT NULL,
+    normalized_product_name VARCHAR(255) NOT NULL,
+    manufacturer_name VARCHAR(255),
+    dosage_form VARCHAR(100),
+    main_ingredient_raw TEXT,
+    product_image_url TEXT,
+    image_source_name VARCHAR(255),
+    image_source_url TEXT,
+    efficacy_text TEXT,
+    use_method_text TEXT,
+    warning_text TEXT,
+    interaction_text TEXT,
+    side_effect_text TEXT,
+    storage_text TEXT,
+    source_name VARCHAR(255),
+    source_url TEXT,
+    source_record_id VARCHAR(100),
+    fetched_at TIMESTAMP NULL,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    KEY idx_official_product_norm (normalized_product_name),
+    KEY idx_official_product_pharm_code (pharm_product_code),
+    KEY idx_official_product_ident_code (drug_identification_code)
+) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS official_drug_product_ingredients (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    item_seq VARCHAR(50) NOT NULL,
+    ingredient_name VARCHAR(255) NOT NULL,
+    normalized_ingredient_name VARCHAR(255) NOT NULL,
+    canonical_drug_id VARCHAR(50) NOT NULL,
+    source_name VARCHAR(255),
+    source_record_id VARCHAR(100),
+    UNIQUE KEY uq_official_product_ingredient (item_seq, normalized_ingredient_name),
+    KEY idx_official_ingredient_norm (normalized_ingredient_name),
+    FOREIGN KEY (item_seq) REFERENCES official_drug_products(item_seq),
+    FOREIGN KEY (canonical_drug_id) REFERENCES canonical_drug_entities(canonical_drug_id)
+) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS standardized_interactions (
     claim_id VARCHAR(50) PRIMARY KEY,
     raw_id VARCHAR(50),
