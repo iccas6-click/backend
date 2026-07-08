@@ -118,6 +118,15 @@ GET /api/v1/interactions?supplement=오메가3
 | `overall` | string | `"danger"` \| `"caution"` \| `"safe"` — 전체 종합 위험도 |
 | `summary` | string | 종합 안내 문구 (`lang`에 맞춰 번역됨) |
 | `pairs` | array | 위험도 높은 순으로 정렬된 조합 목록 (아래 `InteractionPair` 참고) |
+| `matchedDrugNames` | string[] | 분석에 실제 사용된 약 성분명 |
+| `matchedSupplementNames` | string[] | 분석에 실제 사용된 건강기능식품 성분명 |
+| `ignoredDrugNames` | string[] | 제품명/포장값 등 성분 분석에서 제외된 알약 입력값 |
+| `checkedCount` | integer | 실제로 확인한 건강기능식품 성분 x 약 성분 조합 수 |
+| `detectedCount` | integer | 주의 근거가 발견된 조합 수 |
+| `undetectedCount` | integer | 현재 DB 기준 주의 근거가 발견되지 않은 조합 수 |
+| `unmatchedSupplementCount` | integer | 건강기능식품 성분으로 해석하지 못한 입력 수 |
+| `unmatchedDrugCount` | integer | 약 성분으로 해석하지 못한 입력 수 |
+| `unmatchedCombinationCount` | integer | 해석 실패 때문에 조합 확인이 불가능했던 수 |
 
 **`InteractionPair`**
 
@@ -140,21 +149,40 @@ GET /api/v1/interactions?supplement=오메가3
       "level": "caution",
       "description": "함께 복용 시 출혈 위험이 증가할 수 있음."
     }
-  ]
+  ],
+  "matchedDrugNames": ["아스피린"],
+  "matchedSupplementNames": ["오메가-3 지방산"],
+  "ignoredDrugNames": [],
+  "checkedCount": 1,
+  "detectedCount": 1,
+  "undetectedCount": 0,
+  "unmatchedSupplementCount": 0,
+  "unmatchedDrugCount": 0,
+  "unmatchedCombinationCount": 0
 }
 ```
 
 ### 동작 규칙
 
 1. `items`를 `category` 기준 `알약` / `건강기능식품 라벨`로 분류
-2. 건강기능식품이 하나도 없으면 즉시 `{ overall: "safe", summary: "분석할 건강기능식품이 없습니다.", pairs: [] }` 반환 (DB 조회 없음)
-3. 건강기능식품 성분 × 알약 약물 조합을 `standardized_interactions`에서 조회. 알약이 없으면 해당 성분의 전체 상호작용 반환
-4. `claim_text_original`에 포함된 키워드로 위험도 자동 추론
+2. 알약 입력이 제품명으로 들어온 경우 `pill_product_ingredients`에서 실제 성분으로 확장
+3. 알약 성분명은 `canonical_drug_entities`와 alias를 기준으로 해석
+4. 건강기능식품 입력은 `supplement_map`과 `supplement_aliases`로 표준 성분에 연결
+5. 건강기능식품이 하나도 없으면 즉시 `{ overall: "safe", summary: "분석할 건강기능식품이 없습니다.", pairs: [] }` 반환
+6. 건강기능식품 성분 × 약 성분 조합을 `standardized_interactions`와 `interaction_evidence_claims` 기준으로 조회
+7. `interaction_text_raw` 또는 evidence text에 포함된 키워드로 위험도 자동 추론
    - `danger` 키워드: 금기, 심각, 위험, 사망, 피해야, 절대
-   - `caution` 키워드: 주의, 감소, 증가, 영향, 모니터, 확인, 조절, 상호작용, 출혈
-   - 둘 다 없으면 `safe`
-5. 매칭된 상호작용이 없으면 `{ overall: "safe", summary: "확인된 상호작용이 없습니다...", pairs: [] }` 반환
-6. `pairs`를 위험도 높은 순(`danger` > `caution` > `safe`)으로 정렬, `overall`은 최상위 등급
+   - 그 외 확인된 claim은 기본적으로 `caution`
+8. 매칭된 주의 근거가 없으면 `pairs`는 비며 `overall: "safe"`가 반환됩니다. 이때 `undetectedCount`는 현재 DB 기준 근거 미탐지 조합 수를 뜻하며 안전 검증 완료를 의미하지 않습니다.
+9. `pairs`를 위험도 높은 순(`danger` > `caution` > `safe`)으로 정렬, `overall`은 최상위 등급
+
+### 제품명/성분명 매칭
+
+- 알약 인식 결과의 `product_name`이 들어오면 `pill_product_ingredients`를 통해 여러 성분으로 확장됩니다.
+- 같은 성분이 여러 입력에서 반복되면 중복 제거 후 분석합니다.
+- `PTP`, `PVC`, `ALU`, 단순 함량값, 포장 단위처럼 성분이 아닌 값은 분석에서 제외될 수 있습니다.
+- 건강기능식품은 표준명, 원문명, alias, 일부 부분 일치 순으로 해석합니다.
+- 해석 실패 항목은 실패 카운트에 반영되며, 프론트는 사용자가 직접 수정할 수 있게 표시하는 것이 좋습니다.
 
 ### 다국어 (`lang`)
 

@@ -28,5 +28,19 @@ services:
     volumes:
       - .:/app
 
+  phpmyadmin:
+    image: phpmyadmin:latest
+    container_name: click_backend_phpmyadmin
+    env_file:
+      - .env
+    environment:
+      PMA_HOST: db
+      PMA_PORT: 3306
+      UPLOAD_LIMIT: 64M
+    ports:
+      - "${PHPMYADMIN_PORT:-18089}:80"
+    depends_on:
+      - db
+
 volumes:
   mysql_data:
