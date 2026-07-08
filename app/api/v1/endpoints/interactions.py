@@ -18,6 +18,7 @@ from app.schemas.interaction import (
     LEVEL_RANK,
     RiskLevel,
 )
+from app.services.drug_resolver import resolve_drug
 from app.services.supplement_resolver import resolve_supplement
 from app.services.translator import translate
 
@@ -93,10 +94,9 @@ def _write_analyze_debug_log(body: AnalyzeRequest, response: AnalyzeResponse, co
 @router.get("/interactions", response_model=InteractionResponse)
 def get_interactions(supplement: str):
     """
-    건기식 성분명(또는 개별인정원료명/브랜드명)으로 약물 상호작용 조회.
+    건기식 성분명으로 약물 상호작용 조회.
 
-    supplement: 성분명. 개별인정원료 브랜드명(예: TWK10, 오미자추출물)도 입력 가능.
-    alias 테이블을 통해 canonical 성분으로 해석한 뒤 상호작용 정보를 반환.
+    supplement_entities에서 성분을 해석한 뒤 standardized_interactions를 반환.
     """
     resolved = resolve_supplement(supplement)
 
@@ -135,7 +135,7 @@ def get_interactions(supplement: str):
 
         return InteractionResponse(
             supplement_name=supplement,
-            resolved_name=resolved.canonical_name_ko if resolved else None,
+            resolved_name=resolved.supplement_name_ko if resolved else None,
             matched_alias=resolved.matched_alias if resolved else None,
             match_type=resolved.match_type if resolved else "not_found",
             interactions=[InteractionResult(**row) for row in rows],
@@ -151,7 +151,7 @@ def get_interactions(supplement: str):
 
 
 def _infer_level(text: str | None) -> RiskLevel:
-    """interaction_text_raw 키워드로 위험도 추론."""
+    """claim_text_original 키워드로 위험도 추론."""
     if not text:
         return "safe"
     danger_kw = ["금기", "심각", "위험", "사망", "피해야", "절대"]
@@ -880,7 +880,7 @@ def analyze_interactions(body: AnalyzeRequest):
 
     - 건강기능식품 성분 × 알약 약물 조합을 DB에서 조회
     - 알약이 없으면 건강기능식품 성분 전체 상호작용 반환
-    - interaction_text_raw 키워드로 danger / caution / safe 추론
+    - claim_text_original 키워드로 danger / caution / safe 추론
     """
     lang = parse_lang(body.lang)
     supplements = [it for it in body.items if it.category == "건강기능식품 라벨"]

@@ -1,34 +1,18 @@
-CREATE TABLE IF NOT EXISTS supplement_map (
-    supplement_id VARCHAR(50) PRIMARY KEY,
-    raw_name VARCHAR(255),
-    canonical_name_ko VARCHAR(255),
-    canonical_name_en VARCHAR(255),
-    scientific_name VARCHAR(255),
-    entity_type VARCHAR(100),
-    mapping_status VARCHAR(100),
-    mapping_basis TEXT,
-    source_name VARCHAR(255),
-    source_url TEXT,
-    notes TEXT
-) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+-- ============================================================
+-- CLICK Backend DB — 통합 스키마
+-- drug-supplement schema 기준 (2025-07)
+-- ============================================================
+
+-- 1. 알약 side --------------------------------------------------
 
 CREATE TABLE IF NOT EXISTS canonical_drug_entities (
-    canonical_drug_id VARCHAR(50) PRIMARY KEY,
-    entity_level VARCHAR(100),
-    canonical_name_ko VARCHAR(255),
-    canonical_name_en VARCHAR(255),
-    alias_count INT,
-    raw_aliases TEXT,
-    rxcui VARCHAR(50),
-    atc_code VARCHAR(50),
-    unii VARCHAR(50),
-    kr_ingredient_code VARCHAR(50),
-    external_id_status VARCHAR(100),
-    mapping_status VARCHAR(100),
-    verification_source_name VARCHAR(255),
-    verification_source_url TEXT,
-    notes TEXT
-) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+  canonical_drug_id   VARCHAR(64)  NOT NULL,
+  canonical_drug_name_ko VARCHAR(255) NOT NULL,
+  canonical_drug_name_en VARCHAR(255) NULL,
+  PRIMARY KEY (canonical_drug_id),
+  KEY idx_canonical_drug_name_ko (canonical_drug_name_ko),
+  KEY idx_canonical_drug_name_en (canonical_drug_name_en)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS pill_product_ingredients (
     id INT AUTO_INCREMENT PRIMARY KEY,

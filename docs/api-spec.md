@@ -43,7 +43,7 @@ GET /api/v1/interactions?supplement=오메가3
 | `supplement_name` | string | 요청에 사용된 원본 검색어 |
 | `resolved_name` | string \| null | alias 해석 후 확정된 표준 성분명. 해석 실패 시 `null` |
 | `matched_alias` | string \| null | 실제 매칭에 사용된 표기 |
-| `match_type` | string \| null | `exact_canonical` \| `exact_raw` \| `exact_alias` \| `partial` \| `not_found` |
+| `match_type` | string \| null | `exact_ko` \| `exact_en` \| `partial` \| `not_found` |
 | `interactions` | array | 상호작용 목록 (아래 `InteractionResult` 참고) |
 | `total` | integer | `interactions` 개수 |
 
@@ -51,13 +51,11 @@ GET /api/v1/interactions?supplement=오메가3
 
 | 필드 | 타입 | 설명 |
 |---|---|---|
-| `claim_id` | string | 상호작용 claim 고유 ID |
-| `supplement_canonical_ko` | string \| null | 표준 성분명(한국어) |
+| `interaction_id` | string | 상호작용 고유 ID |
+| `supplement_name_ko` | string \| null | 표준 성분명(한국어) |
 | `drug_canonical_ko` | string \| null | 표준 약물명(한국어) |
 | `drug_canonical_en` | string \| null | 표준 약물명(영어) |
-| `interaction_text_raw` | string \| null | 상호작용 설명 원문(한국어) |
-| `source_review_status` | string \| null | 원문 출처 검토 상태 |
-| `overall_review_status` | string \| null | 전체 검토 상태 |
+| `claim_text_original` | string \| null | 상호작용 설명 원문(한국어) |
 
 **응답 예시**
 ```json
@@ -68,13 +66,11 @@ GET /api/v1/interactions?supplement=오메가3
   "match_type": "exact_alias",
   "interactions": [
     {
-      "claim_id": "SI-0001",
-      "supplement_canonical_ko": "오메가-3 지방산",
+      "interaction_id": "INT-0001",
+      "supplement_name_ko": "오메가-3 지방산",
       "drug_canonical_ko": "아스피린",
       "drug_canonical_en": "Aspirin",
-      "interaction_text_raw": "함께 복용 시 출혈 위험이 증가할 수 있음. 주의가 필요합니다.",
-      "source_review_status": "reviewed",
-      "overall_review_status": "confirmed"
+      "claim_text_original": "함께 복용 시 출혈 위험이 증가할 수 있음. 주의가 필요합니다."
     }
   ],
   "total": 1
