@@ -21,8 +21,11 @@ services:
     container_name: click_backend_api
     env_file:
       - .env
+    environment:
+      MYSQL_HOST: db
+      MYSQL_PORT: 3306
     ports:
-      - "8000:8000"
+      - "${API_PORT:-8001}:8000"
     depends_on:
       - db
     volumes:

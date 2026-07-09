@@ -1,11 +1,11 @@
 """
-입력된 성분명(또는 개별인정원료명)을 supplement_map의 canonical 성분으로 해석하는 서비스.
+Resolve supplement labels against the main DB schema.
 
-우선순위:
-1. supplement_map.canonical_name_ko 정확 일치
-2. supplement_map.raw_name 정확 일치
-3. supplement_aliases.alias 정확 일치
-4. 위 세 컬럼에 대한 LIKE 부분 일치 (가장 짧은 이름 우선)
+Priority:
+1. supplement_entities exact Korean / English names
+2. supplement_product_markers exact or normalized marker text
+3. supplement_entities partial match
+4. legacy supplement_map / supplement_aliases fallback for old running DBs
 """
 from __future__ import annotations
 
@@ -20,120 +20,187 @@ class ResolvedSupplement:
     supplement_id: str
     canonical_name_ko: str
     canonical_name_en: Optional[str]
-    matched_alias: str        # 실제 매칭된 이름
-    match_type: str           # exact_canonical / exact_raw / exact_alias / partial
+    matched_alias: str
+    match_type: str
 
 
-def resolve_supplement(name: str) -> Optional[ResolvedSupplement]:
-    """성분명으로 supplement_map 엔트리를 찾아 반환. 없으면 None."""
+def _normalize(value: str) -> str:
+    return value.strip().lower().replace(" ", "").replace("-", "").replace("_", "")
+
+
+def _table_exists(cursor, table_name: str) -> bool:
+    cursor.execute(
+        """
+        SELECT COUNT(*) AS count
+        FROM information_schema.tables
+        WHERE table_schema = DATABASE()
+          AND table_name = %s
+        """,
+        (table_name,),
+    )
+    row = cursor.fetchone()
+    return bool(row and row["count"] > 0)
+
+
+def _resolved_from_main(cursor, name: str) -> Optional[ResolvedSupplement]:
+    if not _table_exists(cursor, "supplement_entities"):
+        return None
+
     clean = name.strip()
-    normalized = clean.lower().replace(" ", "").replace("-", "").replace("_", "")
-    conn = get_conn()
-    cursor = conn.cursor(dictionary=True)
-    try:
-        # 1) canonical_name_ko / raw_name 정확 일치
+    normalized = _normalize(clean)
+
+    cursor.execute(
+        """
+        SELECT supplement_id, supplement_name_ko, supplement_name_en
+        FROM supplement_entities
+        WHERE supplement_name_ko = %s OR LOWER(supplement_name_en) = LOWER(%s)
+        LIMIT 1
+        """,
+        (clean, clean),
+    )
+    row = cursor.fetchone()
+    if row:
+        return ResolvedSupplement(
+            supplement_id=row["supplement_id"],
+            canonical_name_ko=row["supplement_name_ko"],
+            canonical_name_en=row.get("supplement_name_en"),
+            matched_alias=clean,
+            match_type="exact_main",
+        )
+
+    if _table_exists(cursor, "supplement_product_markers"):
         cursor.execute(
             """
-            SELECT supplement_id, canonical_name_ko, canonical_name_en, raw_name
-            FROM supplement_map
-            WHERE canonical_name_ko = %s OR raw_name = %s
+            SELECT se.supplement_id, se.supplement_name_ko, se.supplement_name_en,
+                   spm.marker_text
+            FROM supplement_product_markers spm
+            JOIN supplement_entities se ON se.supplement_id = spm.supplement_id
+            WHERE spm.marker_text = %s OR spm.marker_text_normalized = %s
+            ORDER BY LENGTH(spm.marker_text) ASC
             LIMIT 1
             """,
-            (clean, clean),
+            (clean, normalized),
         )
         row = cursor.fetchone()
         if row:
-            match_type = "exact_canonical" if row["canonical_name_ko"] == clean else "exact_raw"
             return ResolvedSupplement(
                 supplement_id=row["supplement_id"],
-                canonical_name_ko=row["canonical_name_ko"],
-                canonical_name_en=row["canonical_name_en"],
-                matched_alias=clean,
-                match_type=match_type,
+                canonical_name_ko=row["supplement_name_ko"],
+                canonical_name_en=row.get("supplement_name_en"),
+                matched_alias=row.get("marker_text") or clean,
+                match_type="marker_main",
             )
 
-        # 2) supplement_aliases 정확 일치
+    cursor.execute(
+        """
+        SELECT supplement_id, supplement_name_ko, supplement_name_en,
+               supplement_name_ko AS matched,
+               LENGTH(supplement_name_ko) AS name_len
+        FROM supplement_entities
+        WHERE CHAR_LENGTH(supplement_name_ko) >= 3
+          AND (supplement_name_ko LIKE %s
+               OR supplement_name_en LIKE %s
+               OR %s LIKE CONCAT(CHAR(37), supplement_name_ko, CHAR(37)))
+        ORDER BY name_len ASC
+        LIMIT 1
+        """,
+        (f"%{clean}%", f"%{clean}%", clean),
+    )
+    row = cursor.fetchone()
+    if row:
+        return ResolvedSupplement(
+            supplement_id=row["supplement_id"],
+            canonical_name_ko=row["supplement_name_ko"],
+            canonical_name_en=row.get("supplement_name_en"),
+            matched_alias=row.get("matched") or clean,
+            match_type="partial_main",
+        )
+
+    return None
+
+
+def _resolved_from_legacy(cursor, name: str) -> Optional[ResolvedSupplement]:
+    if not _table_exists(cursor, "supplement_map"):
+        return None
+
+    clean = name.strip()
+    normalized = _normalize(clean)
+    cursor.execute(
+        """
+        SELECT supplement_id, canonical_name_ko, canonical_name_en, raw_name
+        FROM supplement_map
+        WHERE canonical_name_ko = %s OR raw_name = %s
+        LIMIT 1
+        """,
+        (clean, clean),
+    )
+    row = cursor.fetchone()
+    if row:
+        return ResolvedSupplement(
+            supplement_id=row["supplement_id"],
+            canonical_name_ko=row["canonical_name_ko"],
+            canonical_name_en=row.get("canonical_name_en"),
+            matched_alias=clean,
+            match_type="exact_legacy",
+        )
+
+    if _table_exists(cursor, "supplement_aliases"):
         cursor.execute(
             """
             SELECT sm.supplement_id, sm.canonical_name_ko, sm.canonical_name_en, sa.alias
             FROM supplement_aliases sa
             JOIN supplement_map sm ON sa.supplement_id = sm.supplement_id
             WHERE sa.alias = %s
+               OR REPLACE(REPLACE(REPLACE(LOWER(sa.alias), CHAR(32), ''), CHAR(45), ''), CHAR(95), '') = %s
             LIMIT 1
             """,
-            (clean,),
+            (clean, normalized),
         )
         row = cursor.fetchone()
         if row:
             return ResolvedSupplement(
                 supplement_id=row["supplement_id"],
                 canonical_name_ko=row["canonical_name_ko"],
-                canonical_name_en=row["canonical_name_en"],
-                matched_alias=row["alias"],
-                match_type="exact_alias",
+                canonical_name_en=row.get("canonical_name_en"),
+                matched_alias=row.get("alias") or clean,
+                match_type="alias_legacy",
             )
 
-        # 3) 띄어쓰기/하이픈/대소문자 차이를 무시한 정확 일치
-        cursor.execute(
-            """
-            SELECT supplement_id, canonical_name_ko, canonical_name_en,
-                   canonical_name_ko AS matched, 'canonical_normalized' AS src
-            FROM supplement_map
-            WHERE REPLACE(REPLACE(REPLACE(LOWER(canonical_name_ko), ' ', ''), '-', ''), '_', '') = %s
-               OR REPLACE(REPLACE(REPLACE(LOWER(raw_name), ' ', ''), '-', ''), '_', '') = %s
-            UNION ALL
-            SELECT sm.supplement_id, sm.canonical_name_ko, sm.canonical_name_en,
-                   sa.alias AS matched, 'alias_normalized' AS src
-            FROM supplement_aliases sa
-            JOIN supplement_map sm ON sa.supplement_id = sm.supplement_id
-            WHERE REPLACE(REPLACE(REPLACE(LOWER(sa.alias), ' ', ''), '-', ''), '_', '') = %s
-            LIMIT 1
-            """,
-            (normalized, normalized, normalized),
+    cursor.execute(
+        """
+        SELECT supplement_id, canonical_name_ko, canonical_name_en,
+               canonical_name_ko AS matched,
+               LENGTH(canonical_name_ko) AS name_len
+        FROM supplement_map
+        WHERE CHAR_LENGTH(canonical_name_ko) >= 3
+          AND (canonical_name_ko LIKE %s OR raw_name LIKE %s OR %s LIKE CONCAT(CHAR(37), canonical_name_ko, CHAR(37)))
+        ORDER BY name_len ASC
+        LIMIT 1
+        """,
+        (f"%{clean}%", f"%{clean}%", clean),
+    )
+    row = cursor.fetchone()
+    if row:
+        return ResolvedSupplement(
+            supplement_id=row["supplement_id"],
+            canonical_name_ko=row["canonical_name_ko"],
+            canonical_name_en=row.get("canonical_name_en"),
+            matched_alias=row.get("matched") or clean,
+            match_type="partial_legacy",
         )
-        row = cursor.fetchone()
-        if row:
-            return ResolvedSupplement(
-                supplement_id=row["supplement_id"],
-                canonical_name_ko=row["canonical_name_ko"],
-                canonical_name_en=row["canonical_name_en"],
-                matched_alias=row["matched"],
-                match_type="normalized",
-            )
 
-        # 4) 부분 일치 (canonical_name_ko, raw_name, alias) — 가장 짧은 이름 우선
-        cursor.execute(
-            """
-            SELECT supplement_id, canonical_name_ko, canonical_name_en,
-                   canonical_name_ko AS matched, 'canonical' AS src,
-                   LENGTH(canonical_name_ko) AS name_len
-            FROM supplement_map
-            WHERE CHAR_LENGTH(canonical_name_ko) >= 3
-              AND (canonical_name_ko LIKE %s OR raw_name LIKE %s OR %s LIKE CONCAT('%', canonical_name_ko, '%'))
-            UNION ALL
-            SELECT sm.supplement_id, sm.canonical_name_ko, sm.canonical_name_en,
-                   sa.alias AS matched, 'alias' AS src,
-                   LENGTH(sa.alias) AS name_len
-            FROM supplement_aliases sa
-            JOIN supplement_map sm ON sa.supplement_id = sm.supplement_id
-            WHERE CHAR_LENGTH(sa.alias) >= 3
-              AND (sa.alias LIKE %s OR %s LIKE CONCAT('%', sa.alias, '%'))
-            ORDER BY name_len ASC
-            LIMIT 1
-            """,
-            (f"%{clean}%", f"%{clean}%", clean, f"%{clean}%", clean),
-        )
-        row = cursor.fetchone()
-        if row:
-            return ResolvedSupplement(
-                supplement_id=row["supplement_id"],
-                canonical_name_ko=row["canonical_name_ko"],
-                canonical_name_en=row["canonical_name_en"],
-                matched_alias=row["matched"],
-                match_type="partial",
-            )
+    return None
 
+
+def resolve_supplement(name: str) -> Optional[ResolvedSupplement]:
+    """Return a canonical supplement match for display and interaction lookup."""
+    if not name or not name.strip():
         return None
+
+    conn = get_conn()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        return _resolved_from_main(cursor, name) or _resolved_from_legacy(cursor, name)
     finally:
         cursor.close()
         conn.close()

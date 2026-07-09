@@ -6,12 +6,12 @@ from pydantic import BaseModel
 
 class InteractionResult(BaseModel):
     claim_id: str
-    supplement_canonical_ko: Optional[str]
-    drug_canonical_ko: Optional[str]
-    drug_canonical_en: Optional[str]
-    interaction_text_raw: Optional[str]
-    source_review_status: Optional[str]
-    overall_review_status: Optional[str]
+    supplement_canonical_ko: Optional[str] = None
+    drug_canonical_ko: Optional[str] = None
+    drug_canonical_en: Optional[str] = None
+    interaction_text_raw: Optional[str] = None
+    source_review_status: Optional[str] = None
+    overall_review_status: Optional[str] = None
 
 
 class InteractionResponse(BaseModel):
