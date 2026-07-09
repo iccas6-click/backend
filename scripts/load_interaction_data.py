@@ -1,14 +1,14 @@
 """
-processed CSV 파일을 MySQL DB에 적재하는 스크립트.
+CSV 파일을 MySQL DB에 적재하는 스크립트.
 
-소스: click/drug-supplement schema/drug-supplement schema/processed/
+소스: click/drug-supplement schema v2/
 대상: click/backend DB (init.sql 스키마 기준 8개 테이블)
 
 사용법:
   python scripts/load_interaction_data.py
 
 옵션:
-  --processed-dir PATH   processed CSV 폴더 경로 (기본값: 스크립트 내 상수)
+  --processed-dir PATH   CSV 폴더 경로 (기본값: 스크립트 내 상수)
   --skip-supplement-info supplement_info / supplement_product_markers 적재 생략
 """
 from __future__ import annotations
@@ -24,13 +24,12 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# processed CSV 폴더 경로
+# CSV 폴더 경로 (drug-supplement schema v2)
 DEFAULT_PROCESSED_DIR = Path(
-    r"C:\Users\mercu\Documents\kangmin\click\drug-supplement schema"
-    r"\drug-supplement schema\processed"
+    r"C:\Users\mercu\Documents\kangmin\click\drug-supplement schema v2"
 )
 
-# supplement_info는 44,885행으로 크므로 배치 단위로 적재
+# supplement_info는 행 수가 많으므로 배치 단위로 적재
 BATCH_SIZE = 1000
 
 
@@ -289,7 +288,8 @@ def main() -> None:
 
     supplement_info_rows = []
     marker_rows = []
-    if not args.skip_supplement_info:
+    has_supplement_info = (d / "supplement_info.csv").exists() and (d / "supplement_product_markers.csv").exists()
+    if not args.skip_supplement_info and has_supplement_info:
         supplement_info_rows = read_csv(d / "supplement_info.csv")
         marker_rows = read_csv(d / "supplement_product_markers.csv")
 
@@ -318,7 +318,7 @@ def main() -> None:
         load_supplement_entities(cursor, supplement_entity_rows)
         conn.commit()
 
-        if not args.skip_supplement_info:
+        if not args.skip_supplement_info and has_supplement_info:
             print("[6/9] supplement_info")
             load_supplement_info(cursor, supplement_info_rows)
             conn.commit()
@@ -327,8 +327,9 @@ def main() -> None:
             load_supplement_product_markers(cursor, marker_rows)
             conn.commit()
         else:
-            print("[6/9] supplement_info — 생략")
-            print("[7/9] supplement_product_markers — 생략")
+            reason = "파일 없음" if not has_supplement_info else "생략 옵션"
+            print(f"[6/9] supplement_info — 건너뜀 ({reason})")
+            print(f"[7/9] supplement_product_markers — 건너뜀 ({reason})")
 
         print("[8/9] source_claims")
         load_source_claims(cursor, source_claim_rows)
@@ -344,7 +345,7 @@ def main() -> None:
         print(f"  drug_aliases            : {len(alias_rows)}행")
         print(f"  pill_product_ingredients: {len(pill_ingredient_rows)}행")
         print(f"  supplement_entities     : {len(supplement_entity_rows)}행")
-        if not args.skip_supplement_info:
+        if not args.skip_supplement_info and has_supplement_info:
             print(f"  supplement_info         : {len(supplement_info_rows)}행")
             print(f"  supplement_product_markers: {len(marker_rows)}행")
         print(f"  source_claims           : {len(source_claim_rows)}행")
