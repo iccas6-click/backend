@@ -16,7 +16,7 @@
 | source_claims | drug-supplement schema v2 | 138 |
 | standardized_interactions | drug-supplement schema v2 | 475 |
 | supplement_info | drug-supplement schema v1 | 44,885 |
-| supplement_product_markers | drug-supplement schema v1 | 69,845 |
+| supplement_product_markers | drug-supplement schema v1 | 70,018 |
 
 ---
 

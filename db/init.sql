@@ -1,224 +1,115 @@
 -- ============================================================
--- CLICK Backend DB — 통합 스키마
--- drug-supplement schema 기준 (2025-07)
+-- CLICK Backend DB - main schema
+-- drug-supplement schema v1/v2 loader contract
 -- ============================================================
 
--- 1. 알약 side --------------------------------------------------
-
 CREATE TABLE IF NOT EXISTS canonical_drug_entities (
-  canonical_drug_id   VARCHAR(64)  NOT NULL,
-  canonical_drug_name_ko VARCHAR(255) NOT NULL,
-  canonical_drug_name_en VARCHAR(255) NULL,
-  PRIMARY KEY (canonical_drug_id),
-  KEY idx_canonical_drug_name_ko (canonical_drug_name_ko),
-  KEY idx_canonical_drug_name_en (canonical_drug_name_en)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    canonical_drug_id VARCHAR(64) PRIMARY KEY,
+    canonical_drug_name_ko VARCHAR(255) NOT NULL,
+    canonical_drug_name_en VARCHAR(255),
+    KEY idx_canonical_drug_name_ko (canonical_drug_name_ko),
+    KEY idx_canonical_drug_name_en (canonical_drug_name_en)
+) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS pill_products (
+    pill_product_id VARCHAR(64) PRIMARY KEY,
+    product_name VARCHAR(255) NOT NULL,
+    product_name_normalized VARCHAR(255) NOT NULL,
+    UNIQUE KEY uq_pill_product_name_normalized (product_name_normalized),
+    KEY idx_pill_product_name (product_name)
+) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS drug_aliases (
+    drug_alias_id VARCHAR(64) PRIMARY KEY,
+    alias_name VARCHAR(255) NOT NULL,
+    alias_name_normalized VARCHAR(255) NOT NULL,
+    canonical_drug_id VARCHAR(64) NOT NULL,
+    KEY idx_drug_alias_name (alias_name),
+    KEY idx_drug_alias_norm (alias_name_normalized),
+    KEY idx_drug_alias_drug (canonical_drug_id),
+    FOREIGN KEY (canonical_drug_id) REFERENCES canonical_drug_entities(canonical_drug_id)
+        ON DELETE CASCADE
+) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS pill_product_ingredients (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    product_code VARCHAR(50),
-    product_name VARCHAR(255) NOT NULL,
-    normalized_product_name VARCHAR(255) NOT NULL,
+    pill_product_id VARCHAR(64) NOT NULL,
     ingredient_name VARCHAR(255) NOT NULL,
-    normalized_ingredient_name VARCHAR(255) NOT NULL,
-    canonical_drug_id VARCHAR(50) NOT NULL,
-    source_name VARCHAR(255),
-    UNIQUE KEY uq_product_ingredient (product_code, normalized_product_name, normalized_ingredient_name),
-    KEY idx_pill_product_norm (normalized_product_name),
-    KEY idx_pill_ingredient_norm (normalized_ingredient_name),
+    ingredient_name_normalized VARCHAR(255) NOT NULL,
+    canonical_drug_id VARCHAR(64) NOT NULL,
+    PRIMARY KEY (pill_product_id, ingredient_name_normalized, canonical_drug_id),
+    KEY idx_pill_ingredient_norm (ingredient_name_normalized),
+    KEY idx_pill_ingredient_drug (canonical_drug_id),
+    FOREIGN KEY (pill_product_id) REFERENCES pill_products(pill_product_id)
+        ON DELETE CASCADE,
     FOREIGN KEY (canonical_drug_id) REFERENCES canonical_drug_entities(canonical_drug_id)
+        ON DELETE CASCADE
 ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
-CREATE TABLE IF NOT EXISTS official_drug_products (
-    item_seq VARCHAR(50) PRIMARY KEY,
-    pharm_product_code VARCHAR(80),
-    drug_identification_code VARCHAR(80),
-    product_name VARCHAR(255) NOT NULL,
-    normalized_product_name VARCHAR(255) NOT NULL,
-    manufacturer_name VARCHAR(255),
-    dosage_form VARCHAR(100),
-    main_ingredient_raw TEXT,
-    product_image_url TEXT,
-    image_source_name VARCHAR(255),
-    image_source_url TEXT,
-    efficacy_text TEXT,
-    use_method_text TEXT,
-    warning_text TEXT,
-    interaction_text TEXT,
-    side_effect_text TEXT,
-    storage_text TEXT,
-    source_name VARCHAR(255),
+CREATE TABLE IF NOT EXISTS supplement_entities (
+    supplement_id VARCHAR(20) PRIMARY KEY,
+    supplement_name_ko VARCHAR(255) NOT NULL,
+    supplement_name_en VARCHAR(255),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    KEY idx_supplement_name_ko (supplement_name_ko),
+    KEY idx_supplement_name_en (supplement_name_en)
+) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS supplement_info (
+    id BIGINT PRIMARY KEY,
+    sttemnt_no VARCHAR(100) UNIQUE,
+    product TEXT,
+    product_normalized TEXT,
+    entrps TEXT,
+    regist_dt VARCHAR(20),
+    distb_pd TEXT,
+    sungsang TEXT,
+    srv_use TEXT,
+    prsrv_pd TEXT,
+    intake_hint1 TEXT,
+    main_fnctn TEXT,
+    base_standard TEXT,
+    created_at VARCHAR(50)
+) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS supplement_product_markers (
+    marker_id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    supplement_info_id BIGINT NOT NULL,
+    marker_text VARCHAR(500) NOT NULL,
+    marker_text_normalized VARCHAR(500) NOT NULL,
+    marker_source_column VARCHAR(50),
+    marker_type VARCHAR(50),
+    supplement_id VARCHAR(20),
+    mapping_status VARCHAR(30),
+    KEY idx_marker_text_norm (marker_text_normalized),
+    KEY idx_marker_supplement (supplement_id),
+    KEY idx_marker_info (supplement_info_id),
+    FOREIGN KEY (supplement_info_id) REFERENCES supplement_info(id)
+        ON DELETE CASCADE,
+    FOREIGN KEY (supplement_id) REFERENCES supplement_entities(supplement_id)
+        ON DELETE SET NULL
+) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS source_claims (
+    source_claim_id VARCHAR(64) PRIMARY KEY,
+    source_name TEXT,
     source_url TEXT,
-    source_record_id VARCHAR(100),
-    fetched_at TIMESTAMP NULL,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    KEY idx_official_product_norm (normalized_product_name),
-    KEY idx_official_product_pharm_code (pharm_product_code),
-    KEY idx_official_product_ident_code (drug_identification_code)
-) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-
-CREATE TABLE IF NOT EXISTS official_drug_product_ingredients (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    item_seq VARCHAR(50) NOT NULL,
-    ingredient_name VARCHAR(255) NOT NULL,
-    normalized_ingredient_name VARCHAR(255) NOT NULL,
-    canonical_drug_id VARCHAR(50) NOT NULL,
-    source_name VARCHAR(255),
-    source_record_id VARCHAR(100),
-    UNIQUE KEY uq_official_product_ingredient (item_seq, normalized_ingredient_name),
-    KEY idx_official_ingredient_norm (normalized_ingredient_name),
-    FOREIGN KEY (item_seq) REFERENCES official_drug_products(item_seq),
-    FOREIGN KEY (canonical_drug_id) REFERENCES canonical_drug_entities(canonical_drug_id)
+    drug_text_original TEXT,
+    supplement_text_original TEXT,
+    claim_text_original TEXT
 ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS standardized_interactions (
-    claim_id VARCHAR(50) PRIMARY KEY,
-    raw_id VARCHAR(50),
-    supplement_name_raw VARCHAR(255),
-    supplement_id VARCHAR(50),
-    supplement_canonical_ko VARCHAR(255),
-    supplement_canonical_en VARCHAR(255),
-    drug_name_raw VARCHAR(255),
-    drug_alias_id VARCHAR(50),
-    canonical_drug_id VARCHAR(50),
-    drug_canonical_ko VARCHAR(255),
-    drug_canonical_en VARCHAR(255),
-    entity_level VARCHAR(100),
-    interaction_target_group_raw TEXT,
-    drug_category_raw VARCHAR(255),
-    interaction_text_raw TEXT,
-    source_name VARCHAR(255),
-    source_record_id VARCHAR(100),
-    source_url TEXT,
-    source_review_status VARCHAR(100),
-    supplement_mapping_status VARCHAR(100),
-    drug_mapping_status VARCHAR(100),
-    external_id_status VARCHAR(100),
-    overall_review_status VARCHAR(100),
-    FOREIGN KEY (supplement_id) REFERENCES supplement_map(supplement_id),
+    interaction_id VARCHAR(64) PRIMARY KEY,
+    canonical_drug_id VARCHAR(64) NOT NULL,
+    supplement_id VARCHAR(20) NOT NULL,
+    source_claim_id VARCHAR(64) NOT NULL,
+    KEY idx_std_pair (supplement_id, canonical_drug_id),
+    KEY idx_std_drug (canonical_drug_id),
+    KEY idx_std_claim (source_claim_id),
     FOREIGN KEY (canonical_drug_id) REFERENCES canonical_drug_entities(canonical_drug_id)
-) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-
-CREATE TABLE IF NOT EXISTS ingredient_interaction_matrix (
-    supplement_id VARCHAR(50) NOT NULL,
-    supplement_name VARCHAR(255),
-    canonical_drug_id VARCHAR(50) NOT NULL,
-    drug_name VARCHAR(255),
-    risk_level VARCHAR(50) NOT NULL,
-    needs_attention TINYINT(1) NOT NULL DEFAULT 0,
-    evidence_status VARCHAR(100) NOT NULL,
-    reason TEXT,
-    claim_count INT NOT NULL DEFAULT 0,
-    claim_ids TEXT,
-    source_names TEXT,
-    source_urls TEXT,
-    source_review_statuses TEXT,
-    overall_review_statuses TEXT,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    PRIMARY KEY (supplement_id, canonical_drug_id),
-    KEY idx_matrix_risk (risk_level),
-    KEY idx_matrix_attention (needs_attention),
-    FOREIGN KEY (supplement_id) REFERENCES supplement_map(supplement_id),
-    FOREIGN KEY (canonical_drug_id) REFERENCES canonical_drug_entities(canonical_drug_id)
-) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-
-CREATE TABLE IF NOT EXISTS raw_interactions (
-    raw_id VARCHAR(50) PRIMARY KEY,
-    supplement_name_raw VARCHAR(255),
-    drug_name_raw VARCHAR(255),
-    interaction_target_group_raw TEXT,
-    drug_category_raw VARCHAR(255),
-    interaction_text_raw TEXT,
-    severity_raw VARCHAR(100),
-    recommendation_raw TEXT,
-    evidence_text_raw TEXT,
-    source_name VARCHAR(255),
-    source_url TEXT,
-    source_record_id VARCHAR(100),
-    retrieved_date VARCHAR(50),
-    review_status VARCHAR(100),
-    collector VARCHAR(100),
-    notes TEXT
-) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-
-CREATE TABLE IF NOT EXISTS interaction_source_registry (
-    source_key VARCHAR(80) PRIMARY KEY,
-    source_name VARCHAR(255) NOT NULL,
-    source_url TEXT,
-    source_type VARCHAR(100),
-    ingestion_status VARCHAR(100) NOT NULL DEFAULT 'planned',
-    notes TEXT,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-
-CREATE TABLE IF NOT EXISTS interaction_evidence_claims (
-    evidence_id VARCHAR(100) PRIMARY KEY,
-    source_key VARCHAR(80) NOT NULL,
-    source_record_id VARCHAR(100),
-    supplement_id VARCHAR(50) NOT NULL,
-    supplement_name VARCHAR(255),
-    canonical_drug_id VARCHAR(50) NOT NULL,
-    drug_name VARCHAR(255),
-    risk_level VARCHAR(50) NOT NULL,
-    interaction_text TEXT NOT NULL,
-    mechanism_text TEXT,
-    recommendation_text TEXT,
-    evidence_grade VARCHAR(100),
-    source_url TEXT,
-    raw_payload_json JSON,
-    retrieved_at TIMESTAMP NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    UNIQUE KEY uq_evidence_source_record_pair (source_key, source_record_id, supplement_id, canonical_drug_id),
-    KEY idx_evidence_pair (supplement_id, canonical_drug_id),
-    KEY idx_evidence_risk (risk_level),
-    FOREIGN KEY (source_key) REFERENCES interaction_source_registry(source_key),
-    FOREIGN KEY (supplement_id) REFERENCES supplement_map(supplement_id),
-    FOREIGN KEY (canonical_drug_id) REFERENCES canonical_drug_entities(canonical_drug_id)
-) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-
-CREATE TABLE IF NOT EXISTS interaction_pair_source_checks (
-    supplement_id VARCHAR(50) NOT NULL,
-    canonical_drug_id VARCHAR(50) NOT NULL,
-    source_key VARCHAR(80) NOT NULL,
-    check_status VARCHAR(100) NOT NULL,
-    evidence_count INT NOT NULL DEFAULT 0,
-    checked_at TIMESTAMP NULL,
-    notes TEXT,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    PRIMARY KEY (supplement_id, canonical_drug_id, source_key),
-    KEY idx_pair_source_status (source_key, check_status),
-    FOREIGN KEY (supplement_id) REFERENCES supplement_map(supplement_id),
-    FOREIGN KEY (canonical_drug_id) REFERENCES canonical_drug_entities(canonical_drug_id),
-    FOREIGN KEY (source_key) REFERENCES interaction_source_registry(source_key)
-) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-
-CREATE TABLE IF NOT EXISTS external_agent_mappings (
-    source_key VARCHAR(80) NOT NULL,
-    local_entity_type VARCHAR(50) NOT NULL,
-    local_entity_id VARCHAR(50) NOT NULL,
-    local_name VARCHAR(255),
-    external_id VARCHAR(100) NOT NULL,
-    external_name VARCHAR(255),
-    external_entity_type VARCHAR(50),
-    match_status VARCHAR(100) NOT NULL,
-    match_basis TEXT,
-    matched_alias VARCHAR(255),
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    PRIMARY KEY (source_key, local_entity_type, local_entity_id, external_id),
-    KEY idx_external_mapping_local (local_entity_type, local_entity_id),
-    KEY idx_external_mapping_external (source_key, external_id),
-    FOREIGN KEY (source_key) REFERENCES interaction_source_registry(source_key)
-) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-
-CREATE TABLE IF NOT EXISTS domestic_source_raw_records (
-    source_key VARCHAR(80) NOT NULL,
-    source_record_id VARCHAR(100) NOT NULL,
-    title VARCHAR(255),
-    source_url TEXT,
-    raw_payload_json JSON,
-    retrieved_at TIMESTAMP NULL,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    PRIMARY KEY (source_key, source_record_id),
-    FOREIGN KEY (source_key) REFERENCES interaction_source_registry(source_key)
+        ON DELETE CASCADE,
+    FOREIGN KEY (supplement_id) REFERENCES supplement_entities(supplement_id)
+        ON DELETE CASCADE,
+    FOREIGN KEY (source_claim_id) REFERENCES source_claims(source_claim_id)
+        ON DELETE CASCADE
 ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;

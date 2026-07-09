@@ -5,11 +5,13 @@ from pydantic import BaseModel
 
 
 class InteractionResult(BaseModel):
-    interaction_id: str
-    supplement_name_ko: Optional[str]
-    drug_canonical_ko: Optional[str]
-    drug_canonical_en: Optional[str]
-    claim_text_original: Optional[str]
+    claim_id: str
+    supplement_canonical_ko: Optional[str] = None
+    drug_canonical_ko: Optional[str] = None
+    drug_canonical_en: Optional[str] = None
+    interaction_text_raw: Optional[str] = None
+    source_review_status: Optional[str] = None
+    overall_review_status: Optional[str] = None
 
 
 class InteractionResponse(BaseModel):
@@ -35,7 +37,7 @@ class AnalyzeItem(BaseModel):
 
 class InteractionPair(BaseModel):
     id: str
-    items: list[str]   # [성분명, 약물명]
+    items: list[str]       # [성분명, 약물명]
     level: RiskLevel
     description: str
 
@@ -58,3 +60,22 @@ class AnalyzeResponse(BaseModel):
 class AnalyzeRequest(BaseModel):
     items: list[AnalyzeItem]
     lang: str = "ko"  # "ko" | "en" | "fr"
+
+
+
+class LocalizeNamesRequest(BaseModel):
+    names: list[str]
+    lang: str = "ko"
+
+
+class LocalizeNamesResponse(BaseModel):
+    names: dict[str, str]
+
+
+class LocalizeTextsRequest(BaseModel):
+    texts: list[str]
+    lang: str = "ko"
+
+
+class LocalizeTextsResponse(BaseModel):
+    texts: dict[str, str]
