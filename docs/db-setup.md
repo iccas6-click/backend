@@ -66,7 +66,7 @@ python scripts/load_interaction_data.py --processed-dir "C:\경로\drug-suppleme
 
 > `C:\경로` 부분을 실제 로컬 경로로 바꿔서 실행하세요.
 
-스크립트가 폴더 안의 CSV를 읽어 **9개 테이블 전체**를 적재합니다. `supplement_info`(44,885행)와 `supplement_product_markers`(69,845행)는 이 단계에서만 들어옵니다.
+스크립트가 폴더 안의 CSV를 읽어 **9개 테이블 전체**를 적재합니다. `supplement_info`(44,885행)와 `supplement_product_markers`(70,018행)는 이 단계에서만 들어옵니다.
 
 | 테이블 | v1 적재 행 수 |
 |---|---:|
@@ -78,7 +78,7 @@ python scripts/load_interaction_data.py --processed-dir "C:\경로\drug-suppleme
 | source_claims | 138 |
 | standardized_interactions | 475 |
 | supplement_info | 44,885 |
-| supplement_product_markers | 69,845 |
+| supplement_product_markers | 70,018 |
 
 ### 3단계 — v2 데이터 적재 (핵심 7개 테이블 덮어쓰기)
 
@@ -164,7 +164,7 @@ SELECT 'supplement_product_markers',        COUNT(*) FROM supplement_product_mar
 | source_claims | 138 |
 | standardized_interactions | 475 |
 | supplement_info | 44885 |
-| supplement_product_markers | 69845 |
+| supplement_product_markers | 70018 |
 
 #### MySQL 접속 종료
 
