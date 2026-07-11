@@ -29,8 +29,10 @@
 | 건기식 성분 해석율 F1 | **79.6%** | Precision 100%, Recall 66.1% |
 | 처방전 DB 매칭 정확도 | **94.7%** (89/94건) | pill_products LIKE 기준 |
 | 처방전 인식 F1 | **95.7%** | Precision 93.7%, Recall 97.8% |
-| 상호작용 커버리지 | **3.2%** (32/1,000 조합) | 처방전 20장 × 건기식 50장 기준 |
-| 매핑 성공 조합 중 감지율 | **16.7%** (32/192) | 양쪽 매핑 성공 시 상호작용 존재 비율 |
+| 상호작용 DB 역조회 정확도 | **100%** (475/475건) | standardized_interactions 전체 역조회 성공 |
+| 처방약×건기식 상호작용 감지율 | **8.7%** (40/462 조합) | 처방전 14종 × supplement_entities 33종 |
+| 처방약×건기식 상호작용 감지율 (옵션3) | **8.7%** (40/462 조합) | 처방전 14종 × supplement_entities 33종 |
+| 고위험 약물 커버 | **14/78종** | pill_products 매칭 약물 중 상호작용 DB 연결 가능 |
 
 > 병목: 건기식 supplement_entities 33종 / pill_product_ingredients canonical_drug_id 29% 커버로 인한 미연결
 
