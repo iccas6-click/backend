@@ -109,37 +109,68 @@ def get_interactions(supplement: str):
         if resolved:
             cursor.execute(
                 """
-                SELECT claim_id, supplement_canonical_ko, drug_canonical_ko,
-                       drug_canonical_en, interaction_text_raw,
-                       NULL AS source_review_status, overall_review_status
-                FROM v2_standardized_interactions
-                WHERE supplement_id = %s
+                SELECT si.interaction_id AS claim_id,
+                       se.supplement_name_ko AS supplement_canonical_ko,
+                       cde.canonical_drug_name_ko AS drug_canonical_ko,
+                       cde.canonical_drug_name_en AS drug_canonical_en,
+                       sc.claim_text_original AS interaction_text_raw,
+                       'caution' AS risk_level,
+                       1 AS needs_attention,
+                       'confirmed' AS evidence_status,
+                       sc.source_name AS source_names,
+                       sc.source_url AS source_urls
+                FROM standardized_interactions si
+                JOIN source_claims sc ON sc.source_claim_id = si.source_claim_id
+                JOIN canonical_drug_entities cde ON cde.canonical_drug_id = si.canonical_drug_id
+                JOIN supplement_entities se ON se.supplement_id = si.supplement_id
+                WHERE si.supplement_id = %s
+                ORDER BY si.interaction_id
                 """,
                 (resolved.supplement_id,),
             )
         else:
-            # resolve 실패 시에도 v0.22 표준 테이블 안에서만 이름 LIKE 조회
             cursor.execute(
                 """
-                SELECT claim_id, supplement_canonical_ko, drug_canonical_ko,
-                       drug_canonical_en, interaction_text_raw,
-                       NULL AS source_review_status, overall_review_status
-                FROM v2_standardized_interactions
-                WHERE supplement_canonical_ko LIKE %s
-                   OR supplement_canonical_en LIKE %s
+                SELECT si.interaction_id AS claim_id,
+                       se.supplement_name_ko AS supplement_canonical_ko,
+                       cde.canonical_drug_name_ko AS drug_canonical_ko,
+                       cde.canonical_drug_name_en AS drug_canonical_en,
+                       sc.claim_text_original AS interaction_text_raw,
+                       'caution' AS risk_level,
+                       1 AS needs_attention,
+                       'confirmed' AS evidence_status,
+                       sc.source_name AS source_names,
+                       sc.source_url AS source_urls
+                FROM standardized_interactions si
+                JOIN source_claims sc ON sc.source_claim_id = si.source_claim_id
+                JOIN canonical_drug_entities cde ON cde.canonical_drug_id = si.canonical_drug_id
+                JOIN supplement_entities se ON se.supplement_id = si.supplement_id
+                WHERE se.supplement_name_ko LIKE %s
+                   OR se.supplement_name_en LIKE %s
+                ORDER BY si.interaction_id
                 """,
                 (f"%{supplement}%", f"%{supplement}%"),
             )
 
         rows = cursor.fetchall()
 
+        interactions = [
+            InteractionResult(
+                interaction_id=str(row.get("claim_id") or ""),
+                supplement_name_ko=row.get("supplement_canonical_ko"),
+                drug_canonical_ko=row.get("drug_canonical_ko"),
+                drug_canonical_en=row.get("drug_canonical_en"),
+                claim_text_original=row.get("interaction_text_raw"),
+            )
+            for row in rows
+        ]
         return InteractionResponse(
             supplement_name=supplement,
             resolved_name=resolved.supplement_name_ko if resolved else None,
             matched_alias=resolved.matched_alias if resolved else None,
             match_type=resolved.match_type if resolved else "not_found",
-            interactions=[InteractionResult(**row) for row in rows],
-            total=len(rows),
+            interactions=interactions,
+            total=len(interactions),
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -519,8 +550,65 @@ def _resolve_v2_drugs(cursor, drug_names: list[str]) -> tuple[list[dict], int, s
     return resolved, unresolved_count, product_inputs
 
 
+def _resolve_drugs_v3(cursor, drug_names: list[str]) -> tuple[list[dict], int, set[str]]:
+    """v3 스키마: drug_aliases + canonical_drug_entities로 성분명 해석."""
+    if not _table_exists(cursor, "drug_aliases") or not _table_exists(cursor, "canonical_drug_entities"):
+        return [], 0, set()
+
+    resolved: list[dict] = []
+    seen_ids: set[str] = set()
+    matched_inputs: set[str] = set()
+
+    for name in _clean_unique(drug_names):
+        if _is_non_ingredient_text(name):
+            continue
+        normalized = _normalize_match_key(name)
+        if len(normalized) < 2:
+            continue
+        cursor.execute(
+            """
+            SELECT cde.canonical_drug_id,
+                   cde.canonical_drug_name_ko AS canonical_name_ko,
+                   cde.canonical_drug_name_en AS canonical_name_en
+            FROM canonical_drug_entities cde
+            LEFT JOIN drug_aliases da ON da.canonical_drug_id = cde.canonical_drug_id
+            WHERE cde.canonical_drug_name_ko = %s
+               OR LOWER(cde.canonical_drug_name_en) = LOWER(%s)
+               OR REPLACE(REPLACE(LOWER(cde.canonical_drug_name_ko), ' ', ''), '-', '') = %s
+               OR da.alias_name = %s
+               OR da.alias_name_normalized = %s
+               OR da.alias_name_normalized LIKE %s
+            GROUP BY cde.canonical_drug_id
+            LIMIT 8
+            """,
+            (name, name, normalized, name, normalized, f"%{normalized}%"),
+        )
+        rows = cursor.fetchall()
+        if not rows:
+            continue
+        matched_inputs.add(name)
+        for row in rows:
+            drug_id = row["canonical_drug_id"]
+            if drug_id in seen_ids:
+                continue
+            seen_ids.add(drug_id)
+            resolved.append(row)
+
+    unresolved_count = sum(
+        1 for name in drug_names
+        if name not in matched_inputs and not _is_non_ingredient_text(name)
+    )
+    return resolved, unresolved_count, matched_inputs
+
+
 def _resolve_drugs(cursor, drug_names: list[str]) -> tuple[list[dict], int, set[str]]:
     """입력된 제품명/성분명을 canonical_drug_entities 행으로 최대한 해석."""
+    # v3 스키마 우선
+    v3_rows, v3_unresolved_count, v3_inputs = _resolve_drugs_v3(cursor, drug_names)
+    if v3_rows:
+        return v3_rows, v3_unresolved_count, v3_inputs
+
+    # 레거시 경로 (구 스키마 테이블이 있을 때만 동작)
     v2_rows, v2_unresolved_count, v2_product_inputs = _resolve_v2_drugs(cursor, drug_names)
     if v2_rows:
         return v2_rows, v2_unresolved_count, v2_product_inputs
@@ -543,62 +631,8 @@ def _resolve_drugs(cursor, drug_names: list[str]) -> tuple[list[dict], int, set[
             seen.add(drug_id)
             resolved.append(row)
 
-    ingredient_candidates = [
-        name
-        for name in drug_names
-        if name not in product_inputs and not _is_non_ingredient_text(name)
-    ]
-
-    for clean in _clean_unique(ingredient_candidates):
-        normalized = _normalize_match_key(clean)
-        cursor.execute(
-            """
-            SELECT canonical_drug_id, canonical_name_ko, canonical_name_en
-            FROM canonical_drug_entities
-            WHERE canonical_name_ko = %s
-               OR LOWER(canonical_name_en) = LOWER(%s)
-            LIMIT 8
-            """,
-            (clean, clean),
-        )
-        rows = cursor.fetchall()
-        if not rows:
-            cursor.execute(
-                """
-                SELECT canonical_drug_id, canonical_name_ko, canonical_name_en
-                FROM canonical_drug_entities
-                WHERE REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LOWER(canonical_name_ko), ' ', ''), '-', ''), '_', ''), '/', ''), '(', ''), ')', ''), '.', '') = %s
-                   OR REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LOWER(canonical_name_en), ' ', ''), '-', ''), '_', ''), '/', ''), '(', ''), ')', ''), '.', '') = %s
-                   OR REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LOWER(raw_aliases), ' ', ''), '-', ''), '_', ''), '/', ''), '(', ''), ')', ''), '.', '') LIKE %s
-                LIMIT 8
-                """,
-                (normalized, normalized, f"%{normalized}%"),
-            )
-            rows = cursor.fetchall()
-        if not rows:
-            cursor.execute(
-                """
-                SELECT canonical_drug_id, canonical_name_ko, canonical_name_en
-                FROM canonical_drug_entities
-                WHERE raw_aliases LIKE %s
-               OR raw_aliases LIKE %s
-               OR %s LIKE CONCAT('%', canonical_name_ko, '%')
-               OR %s LIKE CONCAT('%', canonical_name_en, '%')
-            LIMIT 8
-            """,
-                (f"%{clean}%", f"%{clean.lower()}%", clean, clean),
-            )
-            rows = cursor.fetchall()
-        if not rows:
-            unresolved_count += 1
-            continue
-
-        for row in rows:
-            drug_id = row["canonical_drug_id"]
-            if drug_id in seen:
-                continue
-            seen.add(drug_id)
-            resolved.append(row)
+    for clean in _clean_unique([n for n in drug_names if n not in product_inputs and not _is_non_ingredient_text(n)]):
+        unresolved_count += 1
 
     return resolved, unresolved_count, product_inputs
 
@@ -738,8 +772,67 @@ def _query_v2_interactions(cursor, supplement_id: str, drug_ids: list[str], drug
     return cursor.fetchall()
 
 
+def _query_interactions_v3(cursor, supplement_id: str, drug_ids: list[str]) -> list[dict]:
+    """v3 스키마: standardized_interactions + source_claims JOIN."""
+    if not _table_exists(cursor, "standardized_interactions"):
+        return []
+
+    if drug_ids:
+        placeholders = ", ".join(["%s"] * len(drug_ids))
+        cursor.execute(
+            f"""
+            SELECT si.interaction_id AS claim_id,
+                   se.supplement_name_ko AS supplement_canonical_ko,
+                   cde.canonical_drug_id,
+                   cde.canonical_drug_name_ko AS drug_canonical_ko,
+                   cde.canonical_drug_name_en AS drug_canonical_en,
+                   sc.claim_text_original AS interaction_text_raw,
+                   'caution' AS risk_level,
+                   1 AS needs_attention,
+                   'confirmed' AS evidence_status,
+                   sc.source_name AS source_names,
+                   sc.source_url AS source_urls
+            FROM standardized_interactions si
+            JOIN source_claims sc ON sc.source_claim_id = si.source_claim_id
+            JOIN canonical_drug_entities cde ON cde.canonical_drug_id = si.canonical_drug_id
+            JOIN supplement_entities se ON se.supplement_id = si.supplement_id
+            WHERE si.supplement_id = %s
+              AND si.canonical_drug_id IN ({placeholders})
+            ORDER BY si.interaction_id
+            """,
+            (supplement_id, *drug_ids),
+        )
+    else:
+        cursor.execute(
+            """
+            SELECT si.interaction_id AS claim_id,
+                   se.supplement_name_ko AS supplement_canonical_ko,
+                   cde.canonical_drug_id,
+                   cde.canonical_drug_name_ko AS drug_canonical_ko,
+                   cde.canonical_drug_name_en AS drug_canonical_en,
+                   sc.claim_text_original AS interaction_text_raw,
+                   'caution' AS risk_level,
+                   1 AS needs_attention,
+                   'confirmed' AS evidence_status,
+                   sc.source_name AS source_names,
+                   sc.source_url AS source_urls
+            FROM standardized_interactions si
+            JOIN source_claims sc ON sc.source_claim_id = si.source_claim_id
+            JOIN canonical_drug_entities cde ON cde.canonical_drug_id = si.canonical_drug_id
+            JOIN supplement_entities se ON se.supplement_id = si.supplement_id
+            WHERE si.supplement_id = %s
+            ORDER BY si.interaction_id
+            """,
+            (supplement_id,),
+        )
+    return cursor.fetchall()
+
+
 def _query_interactions(cursor, supplement_id: str, drug_ids: list[str], drug_names: list[str]) -> list[dict]:
-    """앱 표시는 v0.22 표준 상호작용 테이블만 사용한다."""
+    """v3 스키마 우선, 없으면 레거시 경로."""
+    v3_rows = _query_interactions_v3(cursor, supplement_id, drug_ids)
+    if v3_rows:
+        return v3_rows
     return _query_v2_interactions(cursor, supplement_id, drug_ids, drug_names)
 
 
@@ -844,19 +937,75 @@ def _resolve_v2_supplements(cursor, supplement_names: list[str]) -> tuple[list[d
     return resolved_items, matched_inputs
 
 
+def _resolve_supplements_v3(cursor, supplement_names: list[str]) -> tuple[list[dict], set[str]]:
+    """v3 스키마: supplement_entities로 건기식 성분명 해석."""
+    if not _table_exists(cursor, "supplement_entities"):
+        return [], set()
+
+    resolved: list[dict] = []
+    matched_inputs: set[str] = set()
+    seen: set[str] = set()
+
+    for name in _clean_unique(supplement_names):
+        normalized = _normalize_match_key(name)
+        if not normalized:
+            continue
+        cursor.execute(
+            """
+            SELECT supplement_id,
+                   supplement_name_ko AS canonical_name_ko,
+                   supplement_name_en AS canonical_name_en
+            FROM supplement_entities
+            WHERE supplement_name_ko = %s
+               OR LOWER(supplement_name_en) = LOWER(%s)
+               OR REPLACE(LOWER(supplement_name_ko), ' ', '') LIKE %s
+            LIMIT 4
+            """,
+            (name, name, f"%{normalized}%"),
+        )
+        rows = cursor.fetchall()
+        if not rows:
+            continue
+        matched_inputs.add(name)
+        for row in rows:
+            sid = row["supplement_id"]
+            if sid in seen:
+                continue
+            seen.add(sid)
+            resolved.append({
+                "id": sid,
+                "label": row["canonical_name_ko"] or row["canonical_name_en"] or name,
+                "matchedAlias": name,
+                "source": "v3",
+            })
+    return resolved, matched_inputs
+
+
 def _resolved_supplements(cursor, supplement_names: list[str]) -> tuple[list[dict], int]:
     """분석 후보 건강기능식품을 canonical supplement 기준으로 중복 제거."""
     resolved_items: list[dict] = []
     unresolved_count = 0
     seen: set[str] = set()
-    v2_items, v2_matched_inputs = _resolve_v2_supplements(cursor, supplement_names)
+
+    # v3 스키마 우선
+    v3_items, v3_matched_inputs = _resolve_supplements_v3(cursor, supplement_names)
+    for item in v3_items:
+        if item["id"] in seen:
+            continue
+        seen.add(item["id"])
+        resolved_items.append(item)
+
+    remaining = [name for name in supplement_names if name not in v3_matched_inputs]
+
+    # 레거시 경로 (구 스키마 테이블이 있을 때만 동작)
+    v2_items, v2_matched_inputs = _resolve_v2_supplements(cursor, remaining)
     for item in v2_items:
         if item["id"] in seen:
             continue
         seen.add(item["id"])
         resolved_items.append(item)
 
-    for supp_name in [name for name in supplement_names if name not in v2_matched_inputs]:
+    for supp_name in [name for name in remaining if name not in v2_matched_inputs]:
         resolved = resolve_supplement(supp_name)
         if not resolved:
             unresolved_count += 1
