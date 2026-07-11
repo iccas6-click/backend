@@ -1,0 +1,179 @@
+﻿canonical_drug_id,canonical_drug_name_ko,canonical_drug_name_en
+DRUG_CANON_001,아자티오프린,azathioprine
+DRUG_CANON_002,바실릭시맙,basiliximab
+DRUG_CANON_003,사이클로스포린,cyclosporine
+DRUG_CANON_004,다클리주맙,daclizumab
+DRUG_CANON_005,무로모납-CD3,muromonab-CD3
+DRUG_CANON_006,미코페놀레이트,mycophenolate
+DRUG_CANON_007,타크로리무스,tacrolimus
+DRUG_CANON_008,시롤리무스,sirolimus
+DRUG_CANON_009,프레드니손,prednisone
+DRUG_CANON_010,페넬진,phenelzine
+DRUG_CANON_011,아스피린,aspirin
+DRUG_CANON_012,클로피도그렐,clopidogrel
+DRUG_CANON_013,티클로피딘,ticlopidine
+DRUG_CANON_014,디클로페낙,diclofenac
+DRUG_CANON_015,나프록센,naproxen
+DRUG_CANON_016,달테파린,dalteparin
+DRUG_CANON_017,에녹사파린,enoxaparin
+DRUG_CANON_018,헤파린,heparin
+DRUG_CANON_019,와파린,warfarin
+DRUG_CANON_020,실로스타졸,cilostazol
+DRUG_CANON_021,이부프로펜,ibuprofen
+DRUG_CANON_022,인슐린,insulin
+DRUG_CANON_023,니페디핀,nifedipine
+DRUG_CANON_024,랄테그라비르,raltegravir
+DRUG_CANON_025,펙소페나딘,fexofenadine
+DRUG_CANON_026,클로르족사존,chlorzoxazone
+DRUG_CANON_027,테오필린,theophylline
+DRUG_CANON_028,이마티닙,imatinib
+DRUG_CANON_029,항생제,antibiotics
+DRUG_CANON_030,클로로티아지드,chlorothiazide
+DRUG_CANON_031,클로르탈리돈,chlorthalidone
+DRUG_CANON_032,푸로세미드,furosemide
+DRUG_CANON_033,히드로클로로티아지드,hydrochlorothiazide
+DRUG_CANON_034,세보플루란,sevoflurane
+DRUG_CANON_035,글리피지드,glipizide
+DRUG_CANON_036,글리메피리드,glimepiride
+DRUG_CANON_037,메트포르민,metformin
+DRUG_CANON_038,피오글리타존,pioglitazone
+DRUG_CANON_039,로시글리타존,rosiglitazone
+DRUG_CANON_040,타목시펜,tamoxifen
+DRUG_CANON_041,콜레스테롤 합성 억제제,cholesterol synthesis inhibitors
+DRUG_CANON_042,라록시펜,raloxifene
+DRUG_CANON_043,페노티아진계 약물,phenothiazines
+DRUG_CANON_044,플루옥세틴,fluoxetine
+DRUG_CANON_045,파록세틴,paroxetine
+DRUG_CANON_046,설트랄린,sertraline
+DRUG_CANON_047,라미프릴,ramipril
+DRUG_CANON_048,살부타몰,salbutamol
+DRUG_CANON_049,메타프로테레놀,metaproterenol
+DRUG_CANON_050,이소프로테레놀,isoproterenol
+DRUG_CANON_051,테르부탈린,terbutaline
+DRUG_CANON_052,에페드린,ephedrine
+DRUG_CANON_053,모노아민 산화효소 억제제,monoamine oxidase inhibitors (MAOIs)
+DRUG_CANON_054,갑상선 호르몬 대체제,thyroid hormone replacement therapy
+DRUG_CANON_055,ACE 억제제 및 ARB 제제,ACE inhibitors and angiotensin II receptor blockers (ARBs)
+DRUG_CANON_056,니트로글리세린,nitroglycerin
+DRUG_CANON_057,이소소르비드 질산염 제제,isosorbide nitrate preparations
+DRUG_CANON_058,실데나필,sildenafil
+DRUG_CANON_059,스피로노락톤,spironolactone
+DRUG_CANON_060,아세트아미노펜,acetaminophen
+DRUG_CANON_061,아미오다론,amiodarone
+DRUG_CANON_062,카르바마제핀,carbamazepine
+DRUG_CANON_063,이소니아지드,isoniazid
+DRUG_CANON_064,메토트렉세이트,methotrexate
+DRUG_CANON_065,메틸도파,methyldopa
+DRUG_CANON_066,보르테조밉,bortezomib
+DRUG_CANON_067,클로자핀,clozapine
+DRUG_CANON_068,심바스타틴,simvastatin
+DRUG_CANON_069,수니티닙,sunitinib
+DRUG_CANON_070,퀴놀론계 항생제,quinolone antibiotics
+DRUG_CANON_071,시메티딘,cimetidine
+DRUG_CANON_072,경구 피임제,oral contraceptives
+DRUG_CANON_073,지용성 비타민,fat-soluble vitamins
+DRUG_CANON_074,항응고제,anticoagulants
+DRUG_CANON_075,에토포사이드,etoposide
+DRUG_CANON_076,독소루비신,doxorubicin
+DRUG_CANON_077,세레콕시브,celecoxib
+DRUG_CANON_078,피록시캄,piroxicam
+DRUG_CANON_079,플루바스타틴,fluvastatin
+DRUG_CANON_080,이르베사르탄,irbesartan
+DRUG_CANON_081,로사르탄,losartan
+DRUG_CANON_082,페니토인,phenytoin
+DRUG_CANON_083,토르세미드,torsemide
+DRUG_CANON_084,아미트립틸린,amitriptyline
+DRUG_CANON_085,디아제팜,diazepam
+DRUG_CANON_086,플루복사민,fluvoxamine
+DRUG_CANON_087,할로페리돌,haloperidol
+DRUG_CANON_088,이미프라민,imipramine
+DRUG_CANON_089,올란자핀,olanzapine
+DRUG_CANON_090,에스트라디올,estradiol
+DRUG_CANON_091,타크린,tacrine
+DRUG_CANON_092,베라파밀,verapamil
+DRUG_CANON_093,사이클로벤자프린,cyclobenzaprine
+DRUG_CANON_094,멕실레틴,mexiletine
+DRUG_CANON_095,프로프라놀롤,propranolol
+DRUG_CANON_096,펜타조신,pentazocine
+DRUG_CANON_097,졸미트립탄,zolmitriptan
+DRUG_CANON_098,디곡신,digoxin
+DRUG_CANON_099,클로나제팜,clonazepam
+DRUG_CANON_100,졸피뎀,zolpidem
+DRUG_CANON_101,테스토스테론,testosterone
+DRUG_CANON_102,발프로산,valproic acid
+DRUG_CANON_103,오메프라졸,omeprazole
+DRUG_CANON_104,피나스테리드,finasteride
+DRUG_CANON_105,메틸테스토스테론,methyltestosterone
+DRUG_CANON_106,옥산드롤론,oxandrolone
+DRUG_CANON_107,옥시메톨론,oxymetholone
+DRUG_CANON_108,다나졸,danazol
+DRUG_CANON_109,도네페질,donepezil
+DRUG_CANON_110,리바스티그민,rivastigmine
+DRUG_CANON_111,갈란타민,galantamine
+DRUG_CANON_112,아트로핀,atropine
+DRUG_CANON_113,벤즈트로핀,benztropine
+DRUG_CANON_114,비페리덴,biperiden
+DRUG_CANON_115,피소스티그민,physostigmine
+DRUG_CANON_116,트리헥시페니딜,trihexyphenidyl
+DRUG_CANON_117,에드로포늄,edrophonium
+DRUG_CANON_118,네오스티그민,neostigmine
+DRUG_CANON_119,피리도스티그민,pyridostigmine
+DRUG_CANON_120,베타네콜,bethanechol
+DRUG_CANON_121,에코티오페이트,echothiophate
+DRUG_CANON_122,숙시닐콜린,succinylcholine
+DRUG_CANON_123,프로사이클리딘,procyclidine
+DRUG_CANON_124,코르티솔,cortisol
+DRUG_CANON_125,프레드니솔론,prednisolone
+DRUG_CANON_126,로바스타틴,lovastatin
+DRUG_CANON_127,클래리트로마이신,clarithromycin
+DRUG_CANON_128,딜티아젬,diltiazem
+DRUG_CANON_129,에스트로겐,estrogen
+DRUG_CANON_130,인디나비르,indinavir
+DRUG_CANON_131,트리아졸람,triazolam
+DRUG_CANON_132,파모티딘,famotidine
+DRUG_CANON_133,라니티딘,ranitidine
+DRUG_CANON_134,진정제/알코올,sedatives/alcohol
+DRUG_CANON_135,티아지드계 이뇨제,thiazide diuretics
+DRUG_CANON_136,부신피질스테로이드 제제,corticosteroid preparations
+DRUG_CANON_137,레보티록신,levothyroxine
+DRUG_CANON_138,ACE 억제제,angiotensin-converting enzyme inhibitors
+DRUG_CANON_139,안지오텐신 II 수용체 차단제,angiotensin II receptor blockers
+DRUG_CANON_140,해열제,antipyretics
+DRUG_CANON_141,인슐린(사람),regular human insulin
+DRUG_CANON_142,인슐린 리스프로,insulin lispro
+DRUG_CANON_143,인슐린 아스파트,insulin aspart
+DRUG_CANON_144,인슐린 글루리신,insulin glulisine
+DRUG_CANON_145,인슐린 글라진,insulin glargine
+DRUG_CANON_146,인슐린 데터미르,insulin detemir
+DRUG_CANON_147,인슐린 데글루덱,insulin degludec
+DRUG_CANON_148,아목시실린,amoxicillin
+DRUG_CANON_149,암피실린,ampicillin
+DRUG_CANON_150,세팔렉신,cephalexin
+DRUG_CANON_151,세푸록심,cefuroxime
+DRUG_CANON_152,아지트로마이신,azithromycin
+DRUG_CANON_153,독시사이클린,doxycycline
+DRUG_CANON_154,미노사이클린,minocycline
+DRUG_CANON_155,시프로플록사신,ciprofloxacin
+DRUG_CANON_156,레보플록사신,levofloxacin
+DRUG_CANON_157,목시플록사신,moxifloxacin
+DRUG_CANON_158,오플록사신,ofloxacin
+DRUG_CANON_159,노르플록사신,norfloxacin
+DRUG_CANON_160,리오티로닌,liothyronine
+DRUG_CANON_161,캡토프릴,captopril
+DRUG_CANON_162,에날라프릴,enalapril
+DRUG_CANON_163,리시노프릴,lisinopril
+DRUG_CANON_164,페린도프릴,perindopril
+DRUG_CANON_165,발사르탄,valsartan
+DRUG_CANON_166,칸데사르탄,candesartan
+DRUG_CANON_167,텔미사르탄,telmisartan
+DRUG_CANON_168,올메사르탄,olmesartan
+DRUG_CANON_169,피마사르탄,fimasartan
+DRUG_CANON_170,에티닐에스트라디올,ethinyl estradiol
+DRUG_CANON_171,레보노르게스트렐,levonorgestrel
+DRUG_CANON_172,드로스피레논,drospirenone
+DRUG_CANON_173,데소게스트렐,desogestrel
+DRUG_CANON_174,게스토덴,gestodene
+DRUG_CANON_175,노르게스티메이트,norgestimate
+DRUG_CANON_176,노르에티스테론,norethisterone
+DRUG_CANON_177,에티닐에스트라디올+레보노르게스트렐,ethinyl estradiol + levonorgestrel
+DRUG_CANON_178,에티닐에스트라디올+드로스피레논,ethinyl estradiol + drospirenone
