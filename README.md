@@ -4,19 +4,33 @@
 
 ---
 
-## 현재 DB 데이터 규모
+## DB 아키텍처 (v3)
 
-| 테이블 | 출처 | 행 수 |
+| DB | 포트 | 역할 |
 |---|---|---|
-| canonical_drug_entities | drug-supplement schema v2 | 178 |
-| pill_products | drug-supplement schema v2 | 4,525 |
-| drug_aliases | drug-supplement schema v2 | 378 |
-| pill_product_ingredients | drug-supplement schema v2 | 892 |
-| supplement_entities | drug-supplement schema v2 | 33 |
-| source_claims | drug-supplement schema v2 | 138 |
-| standardized_interactions | drug-supplement schema v2 | 475 |
-| supplement_info | drug-supplement schema v1 | 44,885 |
-| supplement_product_markers | drug-supplement schema v1 | 69,845 |
+| AI DB (`click_db`) | 3306 | 제품명 → 성분 조회 (pill_products, supplement_info 등) |
+| Backend DB (`click_backend_db`) | 3307 | 상호작용 분석 (standardized_interactions, canonical_drug_entities 등) |
+
+### Backend DB 데이터 규모
+
+| 테이블 | 행 수 | 설명 |
+|---|---|---|
+| canonical_drug_entities | 178 | 표준 약물 성분 |
+| drug_aliases | 378 | 약물명 변형 매핑 |
+| supplement_entities | 33 | 표준 건기식 성분 |
+| source_claims | 138 | 상호작용 근거 원문 |
+| standardized_interactions | **475** | 건기식–약물 상호작용 (33성분 × 178약물) |
+
+### 상호작용 커버리지 측정 결과
+
+| 지표 | 수치 | 설명 |
+|---|---|---|
+| 건기식 DB 매칭 정확도 | **32.0%** (16/50장) | supplement_info → supplement_entities 연결 |
+| 처방전 canonical_drug_id 확보율 | **28.6%** (26/91건) | pill_product_ingredients 기준 |
+| 상호작용 커버리지 | **3.2%** (32/1,000 조합) | 처방전 20장 × 건기식 50장 기준 |
+| 매핑 성공 조합 중 감지율 | **16.7%** (32/192) | 양쪽 매핑 성공 시 상호작용 존재 비율 |
+
+> 병목: 건기식 supplement_entities 33종 / pill_product_ingredients canonical_drug_id 29% 커버로 인한 미연결
 
 ---
 
