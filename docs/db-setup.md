@@ -121,13 +121,19 @@ docker ps
 
 아래 두 컨테이너가 `Up` 상태여야 합니다:
 
-```
-NAMES
-click_backend_db
-click_supplement_db
-```
+스크립트가 폴더 안의 CSV를 읽어 **9개 테이블 전체**를 적재합니다. `supplement_info`(44,885행)와 `supplement_product_markers`(70,018행)는 이 단계에서만 들어옵니다.
 
----
+| 테이블 | v1 적재 행 수 |
+|---|---:|
+| canonical_drug_entities | 178 |
+| pill_products | 993 |
+| drug_aliases | 378 |
+| pill_product_ingredients | 313 |
+| supplement_entities | 33 |
+| source_claims | 138 |
+| standardized_interactions | 475 |
+| supplement_info | 44,885 |
+| supplement_product_markers | 70,018 |
 
 ### 2단계 — Backend DB 데이터 적재 (5개 테이블)
 
@@ -272,6 +278,8 @@ UNION ALL SELECT 'standardized_interactions',        COUNT(*) FROM standardized_
 | supplement_entities | 33 |
 | source_claims | 138 |
 | standardized_interactions | 475 |
+| supplement_info | 44885 |
+| supplement_product_markers | 70018 |
 
 ```sql
 -- 상호작용 샘플 조회 (오메가-3 관련)

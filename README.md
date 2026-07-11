@@ -8,33 +8,15 @@
 
 | DB | 포트 | 역할 |
 |---|---|---|
-| AI DB (`click_db`) | 3306 | 제품명 → 성분 조회 (pill_products, supplement_info 등) |
-| Backend DB (`click_backend_db`) | 3307 | 상호작용 분석 (standardized_interactions, canonical_drug_entities 등) |
-
-### Backend DB 데이터 규모
-
-| 테이블 | 행 수 | 설명 |
-|---|---|---|
-| canonical_drug_entities | 178 | 표준 약물 성분 |
-| drug_aliases | 378 | 약물명 변형 매핑 |
-| supplement_entities | 33 | 표준 건기식 성분 |
-| source_claims | 138 | 상호작용 근거 원문 |
-| standardized_interactions | **475** | 건기식–약물 상호작용 (33성분 × 178약물) |
-
-### 상호작용 커버리지 측정 결과
-
-| 지표 | 수치 | 설명 |
-|---|---|---|
-| 건기식 DB Top-1 매칭 정확도 | **84.0%** (42/50장) | Gemini 추출명 → MFDS DB Top-1 매칭 |
-| 건기식 성분 해석율 F1 | **79.6%** | Precision 100%, Recall 66.1% |
-| 처방전 DB 매칭 정확도 | **94.7%** (89/94건) | pill_products LIKE 기준 |
-| 처방전 인식 F1 | **95.7%** | Precision 93.7%, Recall 97.8% |
-| 상호작용 DB 역조회 정확도 | **100%** (475/475건) | standardized_interactions 전체 역조회 성공 |
-| 처방약×건기식 상호작용 감지율 | **8.7%** (40/462 조합) | 처방전 14종 × supplement_entities 33종 |
-| 처방약×건기식 상호작용 감지율 (옵션3) | **8.7%** (40/462 조합) | 처방전 14종 × supplement_entities 33종 |
-| 고위험 약물 커버 | **14/78종** | pill_products 매칭 약물 중 상호작용 DB 연결 가능 |
-
-> 병목: 건기식 supplement_entities 33종 / pill_product_ingredients canonical_drug_id 29% 커버로 인한 미연결
+| canonical_drug_entities | drug-supplement schema v2 | 178 |
+| pill_products | drug-supplement schema v2 | 4,525 |
+| drug_aliases | drug-supplement schema v2 | 378 |
+| pill_product_ingredients | drug-supplement schema v2 | 892 |
+| supplement_entities | drug-supplement schema v2 | 33 |
+| source_claims | drug-supplement schema v2 | 138 |
+| standardized_interactions | drug-supplement schema v2 | 475 |
+| supplement_info | drug-supplement schema v1 | 44,885 |
+| supplement_product_markers | drug-supplement schema v1 | 70,018 |
 
 ---
 
