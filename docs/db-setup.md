@@ -121,13 +121,10 @@ docker ps
 
 아래 두 컨테이너가 `Up` 상태여야 합니다:
 
-```
-NAMES
-click_backend_db
-click_supplement_db
-```
-
----
+| 컨테이너명 | 포트 |
+|---|---|
+| `click_backend_db` | 3307 |
+| `click_supplement_db` | 3306 |
 
 ### 2단계 — Backend DB 데이터 적재 (5개 테이블)
 

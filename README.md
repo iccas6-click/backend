@@ -8,18 +8,27 @@
 
 | DB | 포트 | 역할 |
 |---|---|---|
-| AI DB (`click_db`) | 3306 | 제품명 → 성분 조회 (pill_products, supplement_info 등) |
-| Backend DB (`click_backend_db`) | 3307 | 상호작용 분석 (standardized_interactions, canonical_drug_entities 등) |
+| Backend DB (`click_backend_db`) | **3307** | 상호작용 분석 |
+| AI DB (`click_db`) | **3306** | 제품명 → 성분 조회 |
 
-### Backend DB 데이터 규모
+### Backend DB 테이블 (이 레포에서 관리)
 
 | 테이블 | 행 수 | 설명 |
-|---|---|---|
+|---|---:|---|
 | canonical_drug_entities | 178 | 표준 약물 성분 |
 | drug_aliases | 378 | 약물명 변형 매핑 |
 | supplement_entities | 33 | 표준 건기식 성분 |
 | source_claims | 138 | 상호작용 근거 원문 |
-| standardized_interactions | **475** | 건기식–약물 상호작용 (33성분 × 178약물) |
+| standardized_interactions | 475 | 건기식–약물 상호작용 (33성분 × 178약물) |
+
+### AI DB 테이블 (`click/ai` 레포에서 관리)
+
+| 테이블 | 행 수 |
+|---|---:|
+| supplement_info | 44,885 |
+| supplement_product_markers | 69,845 |
+| pill_products | 4,525 |
+| pill_product_ingredients | 892 |
 
 ### 상호작용 커버리지 측정 결과
 
@@ -31,28 +40,25 @@
 | 처방전 인식 F1 | **95.7%** | Precision 93.7%, Recall 97.8% |
 | 상호작용 DB 역조회 정확도 | **100%** (475/475건) | standardized_interactions 전체 역조회 성공 |
 | 처방약×건기식 상호작용 감지율 | **8.7%** (40/462 조합) | 처방전 14종 × supplement_entities 33종 |
-| 처방약×건기식 상호작용 감지율 (옵션3) | **8.7%** (40/462 조합) | 처방전 14종 × supplement_entities 33종 |
 | 고위험 약물 커버 | **14/78종** | pill_products 매칭 약물 중 상호작용 DB 연결 가능 |
-
-> 병목: 건기식 supplement_entities 33종 / pill_product_ingredients canonical_drug_id 29% 커버로 인한 미연결
 
 ---
 
 ## 전체 데이터 처리 흐름
 
 ```text
-[v2] canonical_drug_entities + supplement_entities + source_claims
-  → standardized_interactions (건기식–약물 상호작용 475건)
+[Backend DB]
+  canonical_drug_entities + supplement_entities + source_claims
+    → standardized_interactions (건기식–약물 상호작용 475건)
+  drug_aliases
+    → 약물명 변형 → canonical_drug_id 매핑
 
-[v2] pill_products + pill_product_ingredients
-  → 알약 제품명 → 약물 성분 확장
-
-[v2] drug_aliases
-  → 약물명 변형 → canonical_drug_id 매핑
-
-[v1] supplement_info (식약처 MFDS 건기식 제품 DB)
-  → supplement_product_markers (성분 파싱 결과)
-  → supplement_entities 매핑
+[AI DB — click/ai 레포]
+  pill_products + pill_product_ingredients
+    → 알약 제품명 → 약물 성분 확장
+  supplement_info (식약처 MFDS 건기식 제품 DB)
+    → supplement_product_markers (성분 파싱 결과)
+    → supplement_entities 매핑
 ```
 
 ---
@@ -86,12 +92,11 @@ docker compose up -d db
 자세한 설명은 [`docs/db-setup.md`](docs/db-setup.md)를 참고하세요.
 
 ```powershell
-# 1단계: v1 데이터 (supplement_info / supplement_product_markers)
-python scripts/load_interaction_data.py --processed-dir "C:\경로\drug-supplement schema\drug-supplement schema\processed"
-
-# 2단계: v2 데이터 (핵심 상호작용 데이터)
-python scripts/load_interaction_data.py
+# Backend DB 5개 테이블 적재 (canonical_drug_entities, supplement_entities, source_claims, drug_aliases, standardized_interactions)
+python scripts/import_v3_data.py --csv-dir "C:\경로\drug-supplement schema v3"
 ```
+
+> AI DB(supplement_info, pill_products 등) 적재는 `click/ai` 레포의 [`docs/db-setup.md`](../ai/docs/db-setup.md)를 참고하세요.
 
 ### FastAPI 서버 실행
 
@@ -161,14 +166,14 @@ backend/
 │   ├── services/           # supplement_resolver, drug_resolver, translator
 │   └── main.py
 ├── db/
-│   └── init.sql            # MySQL 테이블 생성 (8개 테이블)
+│   └── init.sql            # MySQL 테이블 생성 (5개 테이블)
 ├── docs/
 │   ├── db-setup.md         # DB 구축 가이드
 │   ├── db-schema.md        # 테이블 스키마 명세
 │   ├── api-spec.md         # API 명세
 │   └── frontend-integration.md
 ├── scripts/
-│   └── load_interaction_data.py  # CSV → MySQL 적재
+│   └── import_v3_data.py   # CSV → MySQL 적재 (v3)
 ├── docker-compose.yml
 ├── Dockerfile
 ├── requirements.txt
