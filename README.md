@@ -4,9 +4,9 @@
 
 ---
 
-## 현재 DB 데이터 규모
+## DB 아키텍처 (v3)
 
-| 테이블 | 출처 | 행 수 |
+| DB | 포트 | 역할 |
 |---|---|---|
 | canonical_drug_entities | drug-supplement schema v2 | 178 |
 | pill_products | drug-supplement schema v2 | 4,525 |
